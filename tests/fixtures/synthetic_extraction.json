@@ -1,0 +1,106 @@
+{
+ "nct_id": "NCT09999999",
+ "system": "fixture",
+ "_note": "SYNTHETIC extraction of a fictional protocol, written for offline tests and the demo benchmark. Not real study data.",
+ "extraction": {
+  "general_information": {
+   "general_information": {
+    "study_nct_id": "NCT09999999",
+    "protocol_id": "SYN-ONC-201",
+    "protocol_version": "Amendment 3",
+    "protocol_date": "2024-06-14",
+    "study_title": "A Phase 2, Randomized, Double-Blind Study of Exampletinib Plus Carboplatin Versus Placebo Plus Carboplatin in Advanced Non-Small Cell Lung Cancer",
+    "sponsor_name": "Synthetic Oncology Inc.",
+    "phase": "Phase 2",
+    "therapeutic_area": "Oncology",
+    "disease_or_condition": "Advanced non-small cell lung cancer",
+    "allocation": "Randomized 1:1",
+    "masking": "Double-blind (participant, investigator)",
+    "target_enrollment": "120 participants",
+    "number_of_sites": 18,
+    "countries": ["United States", "Canada"],
+    "estimated_duration": "Up to 24 weeks of treatment followed by a 30-day safety follow-up (about 28 weeks in total)"
+   },
+   "objectives_and_endpoints": {
+    "primary_objectives": ["To compare progression-free survival between exampletinib plus carboplatin and placebo plus carboplatin."],
+    "secondary_objectives": ["To compare objective response rate.", "To evaluate safety and tolerability."],
+    "primary_endpoints": ["Progression-free survival per RECIST 1.1"],
+    "secondary_endpoints": ["Objective response rate", "Incidence of treatment-emergent adverse events"],
+    "measurement_method": ["CT scans assessed by RECIST 1.1"],
+    "endpoint_timepoint": "Every 6 weeks until progression"
+   }
+  },
+  "inclusion_exclusion": {
+   "inclusion": [
+    "Age 18 years or older.",
+    "Histologically confirmed stage IIIB-IV non-small cell lung cancer.",
+    "ECOG performance status 0-1.",
+    "Absolute neutrophil count >= 1,500/uL.",
+    "Platelet count >= 100,000/uL.",
+    "Total bilirubin <= 1.5 x ULN; AST and ALT <= 2.5 x ULN."
+   ],
+   "exclusion": [
+    "Prior treatment with a tyrosine kinase inhibitor targeting the same pathway.",
+    "Untreated brain metastases.",
+    "QTc interval > 470 ms at screening."
+   ]
+  },
+  "adverse_events": {
+   "ae_definitions_and_classifications": {
+    "ae_definition": "An adverse event is any untoward medical occurrence in a participant administered a study intervention, whether or not considered related to the study intervention.",
+    "sae_definition": "A serious adverse event is any adverse event that results in death, is life-threatening, requires inpatient hospitalization or prolongation of existing hospitalization, or results in persistent disability.",
+    "severity_grading": "NCI CTCAE version 5.0",
+    "ae_relationship": "Related or not related, as assessed by the investigator."
+   },
+   "reporting_requirements": {
+    "reporting_timeframes": "SAEs must be reported to the sponsor within 24 hours of awareness.",
+    "ae_data_collection_requirements": "AEs are recorded from first dose until 30 days after the last dose.",
+    "reporting_contacts": "Sponsor pharmacovigilance by email."
+   },
+   "safety_monitoring_and_management": {
+    "safety_monitoring_plan": "An independent data monitoring committee reviews unblinded safety data every 6 months.",
+    "discontinuation_criteria": "Permanently discontinue study treatment for absolute neutrophil count < 500/uL lasting more than 7 days, platelet count < 25,000/uL, AST or ALT > 5 x ULN, or QTc > 500 ms.",
+    "emergency_procedures": "Emergency unblinding through the interactive response system."
+   },
+   "specific_ae_information": {
+    "expected_aes": "Nausea, fatigue, rash, neutropenia, thrombocytopenia.",
+    "potential_risks": "Myelosuppression and QT prolongation.",
+    "concomitant_medication_restrictions": "Strong CYP3A4 inhibitors are prohibited. Other investigational agents are not permitted.",
+    "special_population_considerations": "Women of childbearing potential must use effective contraception."
+   }
+  },
+  "interventions": {
+   "arms": [
+    {"arm_name": "Arm A: Exampletinib + carboplatin", "interventions": [
+     {"type": "Drug", "name": "Exampletinib", "dosage": "200 mg orally once daily", "schedule": "Days 1-21 of each 21-day cycle"},
+     {"type": "Drug", "name": "Carboplatin", "dosage": "AUC 5 IV", "schedule": "Day 1 of each 21-day cycle for 4 cycles"}]},
+    {"arm_name": "Arm B: Placebo + carboplatin", "interventions": [
+     {"type": "Drug", "name": "Placebo", "dosage": "Matching tablets once daily", "schedule": "Days 1-21 of each 21-day cycle"},
+     {"type": "Drug", "name": "Carboplatin", "dosage": "AUC 5 IV", "schedule": "Day 1 of each 21-day cycle for 4 cycles"}]}
+   ],
+   "treatment_level_information": [
+    {"product_name": "Exampletinib", "dose": "200 mg once daily", "administration": "Oral, with food", "restrictions": "Avoid grapefruit juice.", "modifications": "Dose level -1: 150 mg; dose level -2: 100 mg."},
+    {"product_name": "Carboplatin", "dose": "AUC 5", "administration": "IV over 30 minutes", "restrictions": "", "modifications": "Reduce to AUC 4 for grade 4 neutropenia."}
+   ]
+  },
+  "site_requirements": {
+   "site_requirements": [{
+    "equipment": ["Pharmacy refrigerator (2-8 C) with temperature log", "12-lead ECG machine", "CT scanner", "Refrigerated centrifuge"],
+    "certifications": ["GCP training", "IATA dangerous goods shipping"],
+    "sample_handling": {"sample_description": "Plasma PK samples", "processing_timeline": "Centrifuge within 30 minutes", "storage_conditions": "Store plasma at 2-8 C until same-day shipment", "transport_requirements": "Ship on cold packs", "access_control": "Restricted lab", "chain_of_custody": "Requisition form"}
+   }],
+   "ip_storage": [
+    {"product_name": "Exampletinib", "temperature_requirements": "Store at 2-8 °C", "environmental_conditions": "Protect from light", "storage_location": "Pharmacy", "access_restrictions": "Pharmacy staff only", "accountability_tracking": "Drug accountability log"}
+   ]
+  },
+  "schedule_of_events": {
+   "schedule_of_events": [
+    {"visit_number": 1, "visit_time": "Screening (Day -28 to -1)", "procedures": [{"procedure_name": "Informed consent"}, {"procedure_name": "Hematology"}, {"procedure_name": "Chemistry"}, {"procedure_name": "12-lead ECG"}, {"procedure_name": "CT scan"}]},
+    {"visit_number": 2, "visit_time": "Cycle 1 Day 1", "procedures": [{"procedure_name": "Hematology"}, {"procedure_name": "Chemistry"}, {"procedure_name": "PK sampling"}, {"procedure_name": "Dispense study drug"}]},
+    {"visit_number": 3, "visit_time": "Cycle 3 Day 1", "procedures": [{"procedure_name": "Hematology"}, {"procedure_name": "Chemistry"}, {"procedure_name": "12-lead ECG"}, {"procedure_name": "CT scan"}]},
+    {"visit_number": 4, "visit_time": "Cycle 8 Day 1", "procedures": [{"procedure_name": "Hematology"}, {"procedure_name": "Chemistry"}]},
+    {"visit_number": 5, "visit_time": "Safety follow-up (Day 30 after last dose, about Week 28)", "procedures": [{"procedure_name": "Hematology"}, {"procedure_name": "AE review"}]}
+   ]
+  }
+ }
+}
