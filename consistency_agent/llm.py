@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import threading
 import time
@@ -77,7 +78,27 @@ def parse_json(text: str) -> Any:
     raise ValueError("No valid JSON in model output")
 
 
+class BudgetExceeded(LLMError):
+    pass
+
+
+_spent = 0.0
+
+
+def spent() -> float:
+    """Estimated dollars spent by this process so far."""
+    return _spent
+
+
+def _check_budget() -> None:
+    cap = os.getenv("AGENT_MAX_USD")
+    if cap and _spent >= float(cap):
+        raise BudgetExceeded(f"Spending cap reached (~${_spent:.2f} of ${float(cap):.2f}). "
+                             "Raise AGENT_MAX_USD to continue.")
+
+
 def _dispatch(provider: str, model: str, call: Call) -> str:
+    _check_budget()
     t0 = time.time()
     if provider in ("anthropic", "bedrock"):
         text, usage = _anthropic(model, call, provider)
@@ -176,8 +197,11 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | 
 
 
 def _log(role: str, model: str, usage: dict, seconds: float) -> None:
+    global _spent
     RUNS.mkdir(parents=True, exist_ok=True)
     cost = estimate_cost(model, usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+    with _lock:
+        _spent += cost or 0.0
     rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "role": role, "model": model,
            "seconds": round(seconds, 2), "usd_est": None if cost is None else round(cost, 5), **usage}
     with _lock, open(RUNS / "usage.jsonl", "a", encoding="utf-8") as f:

@@ -63,6 +63,14 @@ def cmd_fixup(args):
               f"{fx['n_sponsor_queries']} sponsor queries -> {save(res)}")
 
 
+def cmd_pilot(args):
+    from .pilot import run_pilot
+    for nct in (args.ids.split(",") if args.ids else ["NCT02080260"]):
+        s = run_pilot(nct, args.max_usd, baseline=not args.no_baseline, bench_llm=args.bench_llm, effort=args.effort)
+        print((RESULTS / f"pilot_{nct}.md").read_text(encoding="utf-8"))
+        print(f"\nSaved results/pilot_{nct}.md")
+
+
 def cmd_compare(args):
     from .bench.compare import compare
     rep = compare(args.systems.split(","), args.baseline)
@@ -217,6 +225,12 @@ def main(argv=None):
     p.add_argument("--mode", choices=["rules", "llm", "hybrid"], default="hybrid")
     p.add_argument("--effort", choices=["low", "medium", "high"])
     sel(p)
+    p = add("pilot", cmd_pilot, "one-command pilot on one protocol, with a spending cap")
+    p.add_argument("--ids", help="NCT ID(s); default NCT02080260")
+    p.add_argument("--max-usd", type=float, default=15.0, help="stop calling models once this is spent")
+    p.add_argument("--no-baseline", action="store_true", help="skip Run A (the paper's pipeline)")
+    p.add_argument("--bench-llm", action="store_true", help="also run the planted-contradiction benchmark with the LLM")
+    p.add_argument("--effort", choices=["low", "medium", "high"], default="low")
     p = add("compare", cmd_compare, "paired comparison of systems scored by the judge")
     p.add_argument("--systems", default="rag,standalone,rag_b1,rag_b2,rag_b3")
     p.add_argument("--baseline", default="rag")

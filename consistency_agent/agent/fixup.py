@@ -13,10 +13,14 @@ from .pipeline import check
 from .resolve import resolve_all
 
 
-def fixup(result: dict, system: str, mode: str = "hybrid", severities=("critical", "major"), log=print) -> dict:
+def fixup(result: dict, system: str, mode: str = "hybrid", severities=("critical", "major"), log=print,
+          findings: list | None = None, stats: dict | None = None) -> dict:
+    """Pass ``findings``/``stats`` from an earlier check to avoid paying for the check twice."""
     nct = result["nct_id"]
     ctx = {"registry_nct_id": nct, "nct_id": nct, "provenance": result.get("provenance", {})}
-    findings, stats = check(result["extraction"], mode, ctx, log=log)
+    if findings is None:
+        findings, stats = check(result["extraction"], mode, ctx, log=log)
+    stats = stats or {}
     todo = [f for f in findings if f.severity in severities]
     proposals = resolve_all(nct, result["extraction"], todo, ctx, log=log)
     fixed = copy.deepcopy(result["extraction"])
