@@ -1,0 +1,206 @@
+"""Command line entry point. Run `consistency-agent -h` to see the commands."""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+from .config import FINDINGS_OUT, EXTRACTIONS, RESULTS, ROOT, RUNS, SETTINGS, ensure_dirs
+
+FIXTURE = ROOT / "tests" / "fixtures" / "synthetic_extraction.json"
+
+
+def _ids(args) -> list[str]:
+    from .replication.sampling import load_sample
+    ids = [s["nct_id"] for s in load_sample()]
+    if getattr(args, "ids", None):
+        want = set(args.ids.split(","))
+        ids = [i for i in ids if i in want]
+    if getattr(args, "limit", None):
+        ids = ids[:args.limit]
+    return ids
+
+
+def cmd_sample(args):
+    from .replication import sampling
+    if args.download_only:
+        sampling.ensure_pdfs(sampling.load_sample())
+    else:
+        sampling.run()
+
+
+def cmd_extract(args):
+    from .replication import extract, standalone
+    for nct in _ids(args):
+        if extract.out_path(args.system, nct).exists() and not args.force:
+            print(f"{nct}: exists, skipping (use --force)")
+            continue
+        print(f"{nct}: extracting ({args.system}, profile={SETTINGS.profile})")
+        res = extract.extract_protocol(nct) if args.system == "rag" else standalone.extract_protocol(nct)
+        print(f"  -> {extract.save(res)}")
+
+
+def cmd_annotate(args):
+    from .replication import annotate
+    if args.apply_reviews is not None:
+        print(f"Applied {annotate.apply_reviews(args.apply_reviews)} reviewed rows")
+        return
+    ids = _ids(args)
+    for nct in ids:
+        print(f"{nct}: building hybrid ground truth")
+        annotate.annotate_protocol(nct)
+    print(f"Human review queue: {annotate.write_review_queue(ids)}")
+
+
+def cmd_judge(args):
+    from .replication import judge
+    ids = _ids(args)
+    for nct in ids:
+        print(f"{nct}: judging {args.system}")
+        judge.judge_protocol(args.system, nct)
+    s = judge.summarise(args.system, ids)
+    print(json.dumps(s, indent=1))
+    (RESULTS / f"judge_{args.system}.json").write_text(json.dumps(s, indent=1), encoding="utf-8")
+
+
+def cmd_check(args):
+    from .agent import pipeline
+    from .replication.extract import load
+    for nct in _ids(args):
+        res = load(args.system, nct)
+        rep = pipeline.run(nct, res["extraction"], args.mode, {"registry_nct_id": nct}, res.get("provenance"))
+        print(f"{nct}: {len(rep['findings'])} findings -> {FINDINGS_OUT / nct / f'report_{args.mode}.md'}")
+
+
+def cmd_resolve(args):
+    from .agent import pipeline, resolve
+    from .replication.extract import load
+    for nct in _ids(args):
+        ext = load(args.system, nct)["extraction"]
+        _, findings = pipeline.load_findings(nct, args.mode)
+        if args.severity:
+            findings = [f for f in findings if f.severity in args.severity.split(",")]
+        props = resolve.resolve_all(nct, ext, findings, {"registry_nct_id": nct})
+        print(f"{nct}: {len(props)} proposals -> {pipeline.write_proposals(nct, props)}")
+
+
+def cmd_review(args):
+    """Human review gate: approve / reject one proposal; approved fixes are written to a reviewed copy."""
+    from .agent import pipeline, resolve
+    from .replication.extract import load, out_path
+    nct = args.nct_id
+    path = FINDINGS_OUT / nct / "proposals.json"
+    props = json.loads(path.read_text(encoding="utf-8"))
+    if args.list:
+        for p in props:
+            print(f"{p['finding_id']} [{p['severity']}] {p['type']}: {p['action']} "
+                  f"({p['proposal'].get('cause')}) review={p['review']['status']}")
+        return
+    reviewed = out_path("reviewed", nct)
+    ext = json.loads(reviewed.read_text(encoding="utf-8")) if reviewed.exists() else load(args.system, nct)
+    rec = resolve.review(nct, props, args.finding, args.decision, args.note or "", ext["extraction"])
+    pipeline.write_proposals(nct, props)
+    reviewed.parent.mkdir(parents=True, exist_ok=True)
+    ext["system"] = "reviewed"
+    reviewed.write_text(json.dumps(ext, indent=1), encoding="utf-8")
+    print(f"{args.finding}: {rec['review']['status']} (audit: {FINDINGS_OUT / nct / 'audit.jsonl'})")
+
+
+def cmd_bench(args):
+    from .bench import run as bench
+    if args.base == "fixture":
+        paths = [FIXTURE]
+    else:
+        paths = sorted((EXTRACTIONS / args.base).glob("*.json"))
+        if args.limit:
+            paths = paths[:args.limit]
+    if not paths:
+        sys.exit(f"No base extractions in {EXTRACTIONS / args.base}. Run `consistency-agent extract` first or use --base fixture.")
+    bases, reg = bench.load_bases(paths)
+    bench.run(bases, args.modes.split(","), seed=args.seed, registry=reg, tag=args.tag or args.base,
+              resolve=args.resolve)
+
+
+def cmd_cost(args):
+    totals = defaultdict(lambda: {"calls": 0, "input_tokens": 0, "output_tokens": 0, "seconds": 0.0})
+    p = RUNS / "usage.jsonl"
+    if not p.exists():
+        print("No usage logged yet.")
+        return
+    for line in p.read_text(encoding="utf-8").splitlines():
+        r = json.loads(line)
+        t = totals[(r["role"], r["model"])]
+        t["calls"] += 1
+        t["input_tokens"] += r.get("input_tokens", 0)
+        t["output_tokens"] += r.get("output_tokens", 0)
+        t["seconds"] += r.get("seconds", 0)
+    for (role, model), t in sorted(totals.items()):
+        print(f"{role:12s} {model:32s} calls={t['calls']:5d} in={t['input_tokens']:>10,} "
+              f"out={t['output_tokens']:>9,} time={t['seconds'] / 60:.1f} min")
+
+
+def cmd_models(args):
+    for role in ("extractor", "soe_vision", "baseline", "judge", "annotator_a", "annotator_b", "adjudicator", "verifier"):
+        print(f"{role:12s} {SETTINGS.model(role)}")
+    print(f"embeddings   {SETTINGS.embeddings}")
+
+
+def main(argv=None):
+    ensure_dirs()
+    ap = argparse.ArgumentParser(prog="consistency-agent", description=__doc__)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    def add(name, fn, help_):
+        p = sub.add_parser(name, help=help_)
+        p.set_defaults(fn=fn)
+        return p
+
+    def sel(p):
+        p.add_argument("--ids", help="comma-separated NCT IDs (default: whole sample)")
+        p.add_argument("--limit", type=int)
+
+    p = add("sample", cmd_sample, "select the 23 protocols with the paper's design and download them")
+    p.add_argument("--download-only", action="store_true", help="re-download PDFs listed in data/sample.json")
+    p = add("extract", cmd_extract, "run the paper's RAG pipeline or the standalone baseline")
+    p.add_argument("--system", choices=["rag", "standalone"], default="rag")
+    p.add_argument("--force", action="store_true")
+    sel(p)
+    p = add("annotate", cmd_annotate, "build the hybrid ground truth and the human review queue")
+    p.add_argument("--apply-reviews", metavar="CSV", nargs="?", const="", default=None)
+    sel(p)
+    p = add("judge", cmd_judge, "score an extraction system with the LLM judge and Table 7 weights")
+    p.add_argument("--system", default="rag")
+    sel(p)
+    p = add("check", cmd_check, "run the consistency checks on extractions")
+    p.add_argument("--system", default="rag")
+    p.add_argument("--mode", choices=["rules", "llm", "hybrid"], default="hybrid")
+    sel(p)
+    p = add("resolve", cmd_resolve, "propose fixes / sponsor queries for findings")
+    p.add_argument("--system", default="rag")
+    p.add_argument("--mode", default="hybrid")
+    p.add_argument("--severity", help="e.g. critical,major")
+    sel(p)
+    p = add("review", cmd_review, "human review gate for one proposal")
+    p.add_argument("nct_id")
+    p.add_argument("--finding")
+    p.add_argument("--decision", choices=["approve", "reject"])
+    p.add_argument("--note")
+    p.add_argument("--list", action="store_true")
+    p.add_argument("--system", default="rag")
+    p = add("bench", cmd_bench, "synthetic contradiction benchmark")
+    p.add_argument("--base", default="rag", help="extraction system folder, or 'fixture' for the offline demo")
+    p.add_argument("--modes", default="rules,llm,hybrid")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--limit", type=int)
+    p.add_argument("--tag")
+    p.add_argument("--resolve", action="store_true", help="also score the fix-up loop (needs keys + PDFs)")
+    add("cost", cmd_cost, "summarise logged token usage")
+    add("models", cmd_models, "show the model assigned to each role")
+    args = ap.parse_args(argv)
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    main()
