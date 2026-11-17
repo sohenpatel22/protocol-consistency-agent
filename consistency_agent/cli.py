@@ -32,14 +32,50 @@ def cmd_sample(args):
 
 
 def cmd_extract(args):
+    from .config import apply_variant
     from .replication import extract, standalone
+    if args.effort:
+        SETTINGS.effort = args.effort
+    system = args.system
+    if system == "rag" and args.variant:
+        system = apply_variant(args.variant)        # A -> rag, B1 -> rag_b1, B2 -> rag_b2
     for nct in _ids(args):
-        if extract.out_path(args.system, nct).exists() and not args.force:
+        if extract.out_path(system, nct).exists() and not args.force:
             print(f"{nct}: exists, skipping (use --force)")
             continue
-        print(f"{nct}: extracting ({args.system}, profile={SETTINGS.profile})")
-        res = extract.extract_protocol(nct) if args.system == "rag" else standalone.extract_protocol(nct)
+        print(f"{nct}: extracting ({system}, extractor={SETTINGS.model('extractor')}, retrieval={SETTINGS.retrieval}, "
+              f"rerank={SETTINGS.rerank or 'off'}, conditions={SETTINGS.conditional_values})")
+        res = (standalone.extract_protocol(nct) if system == "standalone"
+               else extract.extract_protocol(nct, system=system))
         print(f"  -> {extract.save(res)}")
+
+
+def cmd_fixup(args):
+    """Run B3: check + fix-up agent on one system, apply the suggested fixes, save as another system."""
+    from .agent.fixup import fixup
+    from .replication.extract import load, save
+    if args.effort:
+        SETTINGS.effort = args.effort
+    for nct in _ids(args):
+        res = fixup(load(args.source, nct), args.to, args.mode)
+        fx = res["fixup"]
+        print(f"{nct}: {fx['n_findings']} findings, {fx['n_applied']} fixes applied, {fx['n_escalated']} escalated, "
+              f"{fx['n_sponsor_queries']} sponsor queries -> {save(res)}")
+
+
+def cmd_compare(args):
+    from .bench.compare import compare
+    rep = compare(args.systems.split(","), args.baseline)
+    print((RESULTS / "compare.md").read_text(encoding="utf-8"))
+
+
+def cmd_judge_check(args):
+    from .replication import judge_check
+    if args.agreement:
+        print(json.dumps(judge_check.agreement(args.agreement), indent=1))
+    else:
+        print(f"Score the 'human_score' column, then run with --agreement: "
+              f"{judge_check.export_sample(args.system, _ids(args), args.n)}")
 
 
 def cmd_annotate(args):
@@ -70,7 +106,8 @@ def cmd_check(args):
     from .replication.extract import load
     for nct in _ids(args):
         res = load(args.system, nct)
-        rep = pipeline.run(nct, res["extraction"], args.mode, {"registry_nct_id": nct}, res.get("provenance"))
+        rep = pipeline.run(nct, res["extraction"], args.mode, {"registry_nct_id": nct, "nct_id": nct},
+                           res.get("provenance"))
         print(f"{nct}: {len(rep['findings'])} findings -> {FINDINGS_OUT / nct / f'report_{args.mode}.md'}")
 
 
@@ -78,11 +115,13 @@ def cmd_resolve(args):
     from .agent import pipeline, resolve
     from .replication.extract import load
     for nct in _ids(args):
-        ext = load(args.system, nct)["extraction"]
+        res = load(args.system, nct)
+        ext = res["extraction"]
         _, findings = pipeline.load_findings(nct, args.mode)
         if args.severity:
             findings = [f for f in findings if f.severity in args.severity.split(",")]
-        props = resolve.resolve_all(nct, ext, findings, {"registry_nct_id": nct})
+        props = resolve.resolve_all(nct, ext, findings, {"registry_nct_id": nct, "nct_id": nct,
+                                                         "provenance": res.get("provenance", {})})
         print(f"{nct}: {len(props)} proposals -> {pipeline.write_proposals(nct, props)}")
 
 
@@ -124,7 +163,7 @@ def cmd_bench(args):
 
 
 def cmd_cost(args):
-    totals = defaultdict(lambda: {"calls": 0, "input_tokens": 0, "output_tokens": 0, "seconds": 0.0})
+    totals = defaultdict(lambda: {"calls": 0, "input_tokens": 0, "output_tokens": 0, "seconds": 0.0, "usd": 0.0})
     p = RUNS / "usage.jsonl"
     if not p.exists():
         print("No usage logged yet.")
@@ -136,9 +175,11 @@ def cmd_cost(args):
         t["input_tokens"] += r.get("input_tokens", 0)
         t["output_tokens"] += r.get("output_tokens", 0)
         t["seconds"] += r.get("seconds", 0)
+        t["usd"] += r.get("usd_est") or 0
     for (role, model), t in sorted(totals.items()):
         print(f"{role:12s} {model:32s} calls={t['calls']:5d} in={t['input_tokens']:>10,} "
-              f"out={t['output_tokens']:>9,} time={t['seconds'] / 60:.1f} min")
+              f"out={t['output_tokens']:>9,} time={t['seconds'] / 60:.1f} min  ~${t['usd']:.2f}")
+    print(f"Estimated total: ~${sum(t['usd'] for t in totals.values()):.2f} (list prices in llm.PRICES; check before relying on it)")
 
 
 def cmd_models(args):
@@ -163,9 +204,26 @@ def main(argv=None):
 
     p = add("sample", cmd_sample, "select the 23 protocols with the paper's design and download them")
     p.add_argument("--download-only", action="store_true", help="re-download PDFs listed in data/sample.json")
-    p = add("extract", cmd_extract, "run the paper's RAG pipeline or the standalone baseline")
+    p = add("extract", cmd_extract, "run the paper's RAG pipeline (Run A / B1 / B2) or the standalone baseline")
     p.add_argument("--system", choices=["rag", "standalone"], default="rag")
+    p.add_argument("--variant", choices=["A", "B1", "B2"], default="A",
+                   help="A = the paper; B1 = Opus 5.5; B2 = B1 + hybrid search, reranker, conditional values, citations")
+    p.add_argument("--effort", choices=["low", "medium", "high"], help="thinking effort for Opus/Sonnet 5.x")
     p.add_argument("--force", action="store_true")
+    sel(p)
+    p = add("fixup", cmd_fixup, "Run B3: check + fix-up agent, apply suggested fixes to a copy")
+    p.add_argument("--from", dest="source", default="rag_b2")
+    p.add_argument("--to", default="rag_b3")
+    p.add_argument("--mode", choices=["rules", "llm", "hybrid"], default="hybrid")
+    p.add_argument("--effort", choices=["low", "medium", "high"])
+    sel(p)
+    p = add("compare", cmd_compare, "paired comparison of systems scored by the judge")
+    p.add_argument("--systems", default="rag,standalone,rag_b1,rag_b2,rag_b3")
+    p.add_argument("--baseline", default="rag")
+    p = add("judge-check", cmd_judge_check, "export a blind sample for a person to score, or compute agreement")
+    p.add_argument("--system", default="rag")
+    p.add_argument("--n", type=int, default=50)
+    p.add_argument("--agreement", metavar="CSV")
     sel(p)
     p = add("annotate", cmd_annotate, "build the hybrid ground truth and the human review queue")
     p.add_argument("--apply-reviews", metavar="CSV", nargs="?", const="", default=None)
