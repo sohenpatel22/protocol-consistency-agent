@@ -17,7 +17,7 @@ from .inject import Case, generate
 
 
 def _matches(f, case: Case) -> bool:
-    if f.type != case.type:
+    if f.type != case.type and f.type != "other_conflict":   # the open sweep may catch it too
         return False
     return bool(set(f.fields) & set(case.fields)) or case.operator in ("procedure_mri", "safety_lab_remove")
 

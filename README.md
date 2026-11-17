@@ -48,6 +48,7 @@ extraction JSON → normalize → link map → check (rules + LLM) → rank → 
   - storage temperature vs site equipment
   - NCT ID
   - phase
+- **Open sweep.** The list above is our starting guess, not from the paper. So one more LLM pass reads the whole extraction and reports any other contradiction between two sections. Conflicts it keeps finding can be added to the list.
 - **Rules and LLM together.** Rules handle anything they can parse and treat equivalent units as equal. The LLM handles wording. The LLM must quote the fields it relies on, and a made-up quote drops the finding.
 - **Evidence.** Each finding lists the protocol pages its values came from. Set `AGENT_FIELD_CITATIONS=1` to also get a page and quote per field. This is off by default, because the paper didn't do it.
 - **Fix-up loop.** The loop:

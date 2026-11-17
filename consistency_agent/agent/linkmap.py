@@ -61,6 +61,13 @@ LINKS: list[Link] = [
     Link("phase_mismatch", r"^general_information\.general_information\.phase$",
          r"^general_information\.general_information\.study_title$", "major",
          "Does the phase field disagree with the phase stated in the study title?"),
+    # Open sweep: the pairs above are only the ones we know about. This last check shows the
+    # model every field and asks for any other cross-section contradiction, so new kinds of
+    # conflict are still caught (and can be added to the list once they recur).
+    Link("other_conflict", r".", r".", "major",
+         "Apart from dose, lab-limit, duration, storage, equipment, drug-name, NCT, prohibited-drug, "
+         "safety-lab, phase and copied-text conflicts, do two DIFFERENT sections contradict each other in "
+         "any other way? Only report a conflict that a clinical research coordinator would need to fix."),
 ]
 LINK_BY_TYPE = {l.type: l for l in LINKS}
 SEVERITY_RANK = {"critical": 3, "major": 2, "minor": 1}

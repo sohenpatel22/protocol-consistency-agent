@@ -124,6 +124,24 @@ def test_verifier_drops_unquoted_conflicts(doc):
     assert "three hundred" in flat[arm]
 
 
+def test_open_sweep_needs_two_sections(doc):
+    fields = N.flatten(doc)
+    title = "general_information.general_information.study_title"
+    disc = "adverse_events.safety_monitoring_and_management.discontinuation_criteria"
+    flat = {f.id: f.text for f in fields}
+
+    def fake(call):
+        return {"conflicts": [
+            {"fields": [title, disc], "quotes": [{"field": title, "quote": "Double-Blind"},
+                                                 {"field": disc, "quote": "QTc > 500 ms"}],
+             "explanation": "cross-section", "confidence": 0.6},
+            {"fields": [title], "quotes": [{"field": title, "quote": "Phase 2"}],      # one section only
+             "explanation": "same section", "confidence": 0.9}]}
+    llm.set_override(fake)
+    found, dropped = verify_link(LINK_BY_TYPE["other_conflict"], fields)
+    assert len(found) == 1 and dropped == 1 and "Double-Blind" in flat[title]
+
+
 def test_hybrid_check_merges_sources(doc):
     case = next(c for c in generate(doc, "X") if c.operator == "dose_change")
     llm.set_override(lambda call: {"conflicts": []})

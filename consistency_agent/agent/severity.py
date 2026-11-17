@@ -19,8 +19,10 @@ LEVELS = ["minor", "major", "critical"]
 def merge(rule_f: list[Finding], llm_f: list[Finding]) -> list[Finding]:
     """Union; a verifier finding that overlaps a rule finding of the same type confirms it."""
     out = list(rule_f)
-    for lf in llm_f:
-        twin = next((r for r in out if r.type == lf.type and set(r.fields) & set(lf.fields)), None)
+    # typed findings first, so an open-sweep finding about the same fields confirms them
+    for lf in sorted(llm_f, key=lambda f: f.type == "other_conflict"):
+        twin = next((r for r in out if (r.type == lf.type or lf.type == "other_conflict")
+                     and set(r.fields) & set(lf.fields)), None)
         if twin is None:
             out.append(lf)
         else:

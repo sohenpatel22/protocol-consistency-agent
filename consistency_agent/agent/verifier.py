@@ -56,6 +56,8 @@ def verify_link(link: Link, fields: list[N.Field], context: dict | None = None) 
                 break
             ev.append(Evidence(f.id, q["quote"]))
         ids = sorted({e.field for e in ev} | {i for i in c.get("fields", []) if i in by_id})
+        if link.type == "other_conflict" and len({i.split(".")[0] for i in ids}) < 2:
+            ok = False                       # the open sweep only reports conflicts between sections
         if not ok or not ids:
             dropped += 1
             continue
