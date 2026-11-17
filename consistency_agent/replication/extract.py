@@ -31,13 +31,21 @@ CITE = (
 )
 
 
-def element_prompt(el: Element, context: str, cite: bool = False) -> str:
+CONDITIONS = (
+    "\n\nIf a value differs by condition (study part, arm, cohort, cycle, weight, age group, renal "
+    "function...), do not pick one: give every value with its condition in the same field, e.g. "
+    '"200 mg/m2 (Part A); 175 mg/m2 (Part B)".'
+)
+
+
+def element_prompt(el: Element, context: str, cite: bool = False, conditions: bool = False) -> str:
     return (
         f"Data element: {el.label}\n"
         f"{el.guide}\n\n"
         "Fill this JSON object. Keys are fixed paths in our schema; keep every key, fill the values. "
         "List placeholders show the shape of one item; return as many items as the protocol has.\n"
         f"{json.dumps(el.template(), indent=1)}"
+        f"{CONDITIONS if conditions else ''}"
         f"{CITE if cite else ''}\n\n"
         f"Protocol excerpts:\n{context}"
     )
@@ -47,7 +55,8 @@ def run_element(el: Element, retriever: Retriever) -> tuple[dict, dict]:
     chunks = retriever.retrieve(el.queries, top_k=el.top_k)
     context = format_context(chunks)
     cite = SETTINGS.field_citations
-    out = complete_json("extractor", SYSTEM, element_prompt(el, context, cite), max_tokens=8000)
+    prompt = element_prompt(el, context, cite, SETTINGS.conditional_values)
+    out = complete_json("extractor", SYSTEM, prompt, max_tokens=16000)
     if not isinstance(out, dict):
         out = {}
     values = {p: out.get(p, el.template()[p]) for p in el.paths}
@@ -67,10 +76,11 @@ def run_element(el: Element, retriever: Retriever) -> tuple[dict, dict]:
     return values, prov
 
 
-def extract_protocol(nct_id: str, workers: int = 6, include_soe: bool = True, log=print) -> dict:
+def extract_protocol(nct_id: str, workers: int = 6, include_soe: bool = True, log=print,
+                     system: str = "rag") -> dict:
     chunks = load_chunks(nct_id)
     retriever = Retriever(nct_id, chunks)
-    retriever.retrieve(["warm up"])                       # embed once before threads start
+    retriever.rank(["warm up"])                            # embed once before threads start
     doc = {cat: empty_category(cat) for cat in SCHEMAS if cat != "schedule_of_events"}
     provenance: dict[str, dict] = {}
     errors: dict[str, str] = {}
@@ -100,7 +110,10 @@ def extract_protocol(nct_id: str, workers: int = 6, include_soe: bool = True, lo
         except (LLMError, ValueError) as exc:
             errors["soe"] = str(exc)
             doc["schedule_of_events"] = {"schedule_of_events": []}
-    return {"nct_id": nct_id, "system": "rag", "extraction": doc, "provenance": provenance, "errors": errors}
+    return {"nct_id": nct_id, "system": system, "extraction": doc, "provenance": provenance, "errors": errors,
+            "settings": {"retrieval": SETTINGS.retrieval, "rerank": SETTINGS.rerank, "conditional_values":
+                         SETTINGS.conditional_values, "field_citations": SETTINGS.field_citations,
+                         "extractor": SETTINGS.model("extractor"), "effort": SETTINGS.effort}}
 
 
 def out_path(system: str, nct_id: str) -> Path:

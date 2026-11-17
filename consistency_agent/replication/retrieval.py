@@ -80,16 +80,37 @@ class Retriever:
         np.save(cache, arr)
         return arr
 
+    def _keyword_scores(self, query: str) -> np.ndarray:
+        if self._bm25 is None:
+            self._bm25 = BM25([_chunk_text(c) for c in self.chunks])
+        return self._bm25.scores(query)
+
+    def rank(self, queries: list[str], hybrid: bool | None = None) -> list[int]:
+        """Chunk indices, best first. Hybrid fuses embedding and keyword rankings (reciprocal rank fusion)."""
+        hybrid = SETTINGS.retrieval == "hybrid" if hybrid is None else hybrid
+        dense = np.max(np.vstack([self._scores(q) for q in queries]), axis=0)
+        if not hybrid or self.backend == "bm25":
+            return list(np.argsort(-dense))
+        keyword = np.max(np.vstack([self._keyword_scores(q) for q in queries]), axis=0)
+        fused = np.zeros(len(self.chunks))
+        for s in (dense, keyword):
+            for rank_pos, idx in enumerate(np.argsort(-s)):
+                fused[idx] += 1.0 / (60 + rank_pos)          # standard RRF constant
+        return list(np.argsort(-fused))
+
     # --- retrieval ---------------------------------------------------------------------
     def retrieve(self, queries: list[str], top_k: int | None = None,
-                 char_budget: int | None = None) -> list[Chunk]:
-        """Max score over the element's queries -> top-k -> reunite groups -> reading order."""
+                 char_budget: int | None = None, wide: bool = False) -> list[Chunk]:
+        """Rank -> (optional) rerank a wide candidate set -> top-k -> reunite groups -> reading order.
+
+        ``wide=True`` forces the widen + rerank path (used by the fix-up agent's second round)."""
         top_k = top_k or SETTINGS.top_k
         char_budget = char_budget or SETTINGS.context_char_budget
         if not self.chunks:
             return []
-        scores = np.max(np.vstack([self._scores(q) for q in queries]), axis=0)
-        ranked = list(np.argsort(-scores))
+        ranked = self.rank(queries, hybrid=True if wide else None)
+        if SETTINGS.rerank:
+            ranked = self._rerank(queries, ranked[:SETTINGS.wide_k]) + ranked[SETTINGS.wide_k:]
         picked: list[int] = []
         used = 0
         groups = {}
@@ -111,6 +132,27 @@ class Retriever:
             picked.extend(family)
             used += size
         return [self.chunks[i] for i in sorted(picked, key=lambda j: self.chunks[j].order)]
+
+    def _rerank(self, queries: list[str], candidates: list[int]) -> list[int]:
+        provider, _, model = SETTINGS.rerank.partition(":")
+        if provider != "cohere" or not candidates:
+            return candidates
+        docs = [_chunk_text(self.chunks[i])[:4000] for i in candidates]
+        order = _cohere_rerank(" | ".join(queries)[:2000], docs, model)
+        return [candidates[i] for i in order]
+
+    def pages(self, pages: list[int], neighbours: int = 1) -> list[Chunk]:
+        """Open pages directly: every chunk that touches the given pages (plus neighbours)."""
+        want = {p + d for p in pages for d in range(-neighbours, neighbours + 1)}
+        hit = [c for c in self.chunks if any(p in want for p in range(c.page_start, c.page_end + 1))]
+        return sorted(hit, key=lambda c: c.order)
+
+
+def _cohere_rerank(query: str, docs: list[str], model: str) -> list[int]:
+    import cohere  # optional dependency: pip install .[cohere]
+
+    resp = cohere.ClientV2().rerank(model=model, query=query, documents=docs, top_n=len(docs))
+    return [r.index for r in resp.results]
 
 
 def format_context(chunks: list[Chunk]) -> str:
