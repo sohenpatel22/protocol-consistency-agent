@@ -253,3 +253,85 @@ def test_category_scores():
     assert cats["overall"] == 100.0
     scores["inclusion"]["score"] = 0
     assert category_scores(scores)["ie"] == 50.0
+
+
+# ---- Run B pieces ---------------------------------------------------------------------------
+@pytest.fixture
+def restore_settings():
+    from consistency_agent.config import SETTINGS
+    saved = dict(SETTINGS.__dict__)
+    yield SETTINGS
+    SETTINGS.__dict__.update(saved)
+
+
+def test_variants_switch_models_and_upgrades(restore_settings, monkeypatch):
+    from consistency_agent.config import apply_variant
+    monkeypatch.delenv("COHERE_API_KEY", raising=False)
+    s = restore_settings
+    assert apply_variant("A") == "rag" and s.model("extractor") == "anthropic:claude-sonnet-4-5"
+    assert apply_variant("B1") == "rag_b1" and s.model("extractor") == "anthropic:claude-opus-5-5"
+    assert s.retrieval == "dense" and not s.conditional_values
+    assert apply_variant("B2") == "rag_b2"
+    assert s.retrieval == "hybrid" and s.conditional_values and s.field_citations
+    assert s.rerank == ""                      # no Cohere key: reranker stays off
+
+
+def test_conditional_prompt():
+    from consistency_agent.replication.extract import element_prompt
+    el = E.ELEMENT_BY_KEY["arms"]
+    assert "Part A" in element_prompt(el, "ctx", conditions=True)
+    assert "Part A" not in element_prompt(el, "ctx")
+
+
+def test_open_pages_returns_neighbours():
+    from consistency_agent.replication.pdfparse import Chunk
+    chunks = [Chunk(f"c{i}", i, f"s{i}", 0, 1, [], p, p, f"page {p}") for i, p in enumerate([1, 5, 6, 7, 20])]
+    r = Retriever("X", chunks, backend="bm25")
+    assert [c.page_start for c in r.pages([6])] == [5, 6, 7]
+
+
+def test_fixup_agent_widens_in_round_two(doc, restore_settings):
+    from consistency_agent.agent import resolve
+    from consistency_agent.replication.pdfparse import Chunk
+    case = next(c for c in generate(doc, "X") if c.operator == "dose_change")
+    f = next(f for f in run_rules(case.doc) if f.type == "dose_mismatch")
+    arm = case.fields[0]
+    chunks = [Chunk("c0", 0, "s0", 0, 1, ["6 Treatment"], 31, 31, "Exampletinib 200 mg orally once daily."),
+              Chunk("c1", 1, "s1", 0, 1, ["7 Dose modification"], 40, 40, "Dose level 0 is 200 mg.")]
+    calls = {"decide": 0}
+
+    def fake(call):
+        if "Data field:" in call.user:
+            return {"answers": []}
+        calls["decide"] += 1
+        if calls["decide"] == 1:                   # round 1: evidence not good enough
+            return {"cause": "unresolved"}
+        return {"cause": "extraction_error", "field": arm, "proposed_value": case.original[arm],
+                "protocol_quote": "Exampletinib 200 mg orally once daily"}
+    llm.set_override(fake)
+    restore_settings.fix_rounds = 2
+    prop = resolve.propose("X", case.doc, f, retriever=Retriever("X", chunks, backend="bm25"))
+    assert [r["round"] for r in prop["rounds"]] == [1, 2] and prop["rounds"][1]["action"] == "suggest_fix"
+
+
+def test_compare_is_paired(tmp_path, monkeypatch):
+    from consistency_agent.bench import compare as C
+    monkeypatch.setattr(C, "JUDGEMENTS", tmp_path)
+    monkeypatch.setattr(C, "RESULTS", tmp_path / "results")
+    for system, bump in (("rag", 0), ("rag_b1", 3)):
+        (tmp_path / system).mkdir()
+        for i in range(10):
+            cats = {"overall": 80 + i + bump, "gen": 70 + i + bump}
+            (tmp_path / system / f"N{i}.json").write_text(json.dumps({"nct_id": f"N{i}", "categories": cats}))
+    rep = C.compare(["rag", "rag_b1"], "rag")
+    row = rep["systems"]["rag_b1"]["overall"]
+    assert row["diff"] == 3.0 and row["ci95"] == [3.0, 3.0] and row["wilcoxon_p"] < 0.01
+
+
+def test_weighted_kappa_and_cost():
+    from consistency_agent.llm import estimate_cost
+    from consistency_agent.replication.judge_check import weighted_kappa
+    a = [5, 4.5, 3, 0, 2, 4]
+    assert weighted_kappa(a, a, 2) == 1.0
+    assert weighted_kappa(a, [5, 4, 3, 1, 2, 4], 2) > 0.9
+    assert abs(estimate_cost("anthropic:claude-opus-5-5", 1_000_000, 100_000) - 6.0) < 1e-9

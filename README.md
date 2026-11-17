@@ -58,7 +58,7 @@ extraction JSON → normalize → link map → check (rules + LLM) → rank → 
      - extraction error → corrected value
      - missing condition → value with its condition
      - protocol inconsistency → suggested protocol edit (for sponsors) or draft query to the sponsor (for sites)
-  4. Re-runs the checks on the proposed value. If the conflict stays or a new one appears, it escalates.
+  4. Re-runs the checks on the proposed value. If the conflict stays or a new one appears, it tries a second round with a wider search (hybrid search, reranker, the exact pages each value came from). After two rounds it goes to a person.
 - **Benchmark.** It plants 13 kinds of contradictions in real extractions, plus 6 equivalent rewrites that must not be flagged. It reports:
   - precision and recall per type
   - false positives
@@ -80,23 +80,45 @@ To use Claude on AWS Bedrock instead, set roles to `bedrock:<model id>` in `.env
 
 ## Running
 
-```bash
-consistency-agent sample                         # already done; re-downloads the 23 PDFs if needed
-consistency-agent extract --limit 2              # try two first
-consistency-agent extract                        # all 23, RAG
-consistency-agent extract --system standalone    # the baseline
-consistency-agent annotate                       # reference answers + review CSV
-consistency-agent judge --system rag
-consistency-agent judge --system standalone      # compare with the paper's 89.0% / 62.6%
+The evaluation has two runs on the same 23 protocols, the same reference answers and the same judge.
 
-consistency-agent check                          # reports in data/findings/<NCT>/
-consistency-agent resolve --severity critical,major
-consistency-agent review <NCT> --list
-consistency-agent bench --resolve                # benchmark on the RAG extractions
-consistency-agent cost                           # tokens and time per model
+| Run | What changes | Folder |
+|---|---|---|
+| **A** | Nothing: the paper's method and models (Claude Sonnet 4.5, Opus 4.5 for the schedule, Cohere embeddings) | `rag` |
+| **B1** | Only the model: Claude Opus 5.5 | `rag_b1` |
+| **B2** | B1 + hybrid keyword/embedding search, a reranker, conditional values ("200 mg (Part A); 175 mg (Part B)"), a page and quote per field | `rag_b2` |
+| **B3** | B2 + the consistency checker and fix-up agent, with every suggested fix applied (for scoring; in real use a person approves each one) | `rag_b3` |
+
+```bash
+# shared
+consistency-agent sample                          # already done; re-downloads the 23 PDFs if needed
+consistency-agent annotate                        # reference answers + review CSV (shared by all runs)
+
+# Run A: replication (Claude Sonnet 4.5 retires 2026-11-30, so run this first)
+consistency-agent extract --variant A --limit 2   # try two first
+consistency-agent extract --variant A
+consistency-agent extract --system standalone     # the paper's GPT-4o baseline
+consistency-agent judge --system rag
+consistency-agent judge --system standalone       # compare with the paper's 89.0% / 62.6%
+
+# Run B
+consistency-agent extract --variant B1 --effort low
+consistency-agent extract --variant B2 --effort low
+consistency-agent fixup --from rag_b2 --to rag_b3
+consistency-agent judge --system rag_b1           # same for rag_b2, rag_b3
+consistency-agent compare --systems rag,standalone,rag_b1,rag_b2,rag_b3 --baseline rag
+
+# consistency results and checks
+consistency-agent check --system rag_b2           # reports in data/findings/<NCT>/
+consistency-agent bench --base rag_b2 --resolve   # planted contradictions, Agent KPI
+consistency-agent judge-check --system rag        # blind sample for a person; then --agreement <csv>
+consistency-agent cost                            # tokens, time and estimated $ per model
 ```
 
-Rough cost for the full replication with the paper's models: US$150–200. Most of it is the whole-protocol baseline and the reference answers. Start with `--limit 2`.
+- **`compare`** pairs systems by protocol and reports the difference from Run A with a 95% bootstrap interval, a Wilcoxon p-value and an effect size.
+- **`judge-check`** gives the same judge-vs-human statistics as the paper (weighted kappa, MAE, bias).
+- **Without `COHERE_API_KEY`**, retrieval falls back to BM25 and the reranker is off. Add the key for a faithful Run A.
+- **Rough API cost for both runs: US$450–700.** Start with `--limit 2`; `consistency-agent cost` tracks what you've spent.
 
 ## Limits
 
