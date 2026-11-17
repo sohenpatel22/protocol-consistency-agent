@@ -1,0 +1,449 @@
+{
+  "snapshot_date": "2025-03-31",
+  "seed": 20250331,
+  "strata": {
+    "oncology": 9,
+    "cardiovascular": 7,
+    "other": 7
+  },
+  "n_candidates": 12001,
+  "candidates_by_area": {
+    "oncology": 3355,
+    "cardiovascular": 372,
+    "other": 8274
+  },
+  "studies": [
+    {
+      "nct_id": "NCT04147234",
+      "title": "A Study to Find the Best Dose of BI 1387446 Alone or in Combination With Ezabenlimab (BI 754091) in Patients With Different Types of Advanced or Metastatic Cancer (Solid Tumors)",
+      "conditions": [
+        "Neoplasms"
+      ],
+      "phases": [
+        "PHASE1"
+      ],
+      "area": "oncology",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2025-03-14T10:13",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/34/NCT04147234/Prot_000.pdf",
+      "icf_url": null,
+      "pages": 178,
+      "mean_chars_per_page": 1383.8,
+      "stopword_ratio": 0.222
+    },
+    {
+      "nct_id": "NCT01851369",
+      "title": "TRC102 and Temozolomide for Relapsed Solid Tumors and Lymphomas",
+      "conditions": [
+        "Lymphomas",
+        "Solid Tumors",
+        "NSCLC",
+        "Metastatic Colon Carcinoma",
+        "Granulosa Cell Ovarian Cancer"
+      ],
+      "phases": [
+        "PHASE1",
+        "PHASE2"
+      ],
+      "area": "oncology",
+      "protocol_file": "Prot_SAP_000.pdf",
+      "protocol_upload_date": "2023-11-21T13:41",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/69/NCT01851369/Prot_SAP_000.pdf",
+      "icf_url": "https://cdn.clinicaltrials.gov/large-docs/69/NCT01851369/ICF_001.pdf",
+      "pages": 80,
+      "mean_chars_per_page": 2626.3,
+      "stopword_ratio": 0.284
+    },
+    {
+      "nct_id": "NCT03566485",
+      "title": "Atezolizumab and Cobimetinib or Idasanutlin in Participants With Stage IV or Unresectable Recurrent Estrogen Receptor Positive Breast Cancer",
+      "conditions": [
+        "Stage III Breast Cancer",
+        "Stage IIIA Breast Cancer",
+        "Stage IIIB Breast Cancer",
+        "Stage IIIC Breast Cancer",
+        "Stage IV Breast Cancer",
+        "Estrogen Receptor-positive",
+        "HER2/Neu Negative"
+      ],
+      "phases": [
+        "PHASE1",
+        "PHASE2"
+      ],
+      "area": "oncology",
+      "protocol_file": "Prot_SAP_000.pdf",
+      "protocol_upload_date": "2020-12-18T16:05",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/85/NCT03566485/Prot_SAP_000.pdf",
+      "icf_url": null,
+      "pages": 113,
+      "mean_chars_per_page": 3309.2,
+      "stopword_ratio": 0.254
+    },
+    {
+      "nct_id": "NCT02080260",
+      "title": "A Study of Regorafenib in Advanced Pancreatic Cancer Patients",
+      "conditions": [
+        "Pancreatic Cancer"
+      ],
+      "phases": [
+        "PHASE2"
+      ],
+      "area": "oncology",
+      "protocol_file": "Prot_SAP_000.pdf",
+      "protocol_upload_date": "2018-06-18T09:14",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/60/NCT02080260/Prot_SAP_000.pdf",
+      "icf_url": null,
+      "pages": 68,
+      "mean_chars_per_page": 1996.0,
+      "stopword_ratio": 0.245
+    },
+    {
+      "nct_id": "NCT03776136",
+      "title": "Efficacy and Safety of Lenvatinib (E7080/MK-7902) Plus Pembrolizumab (MK-3475) for Advanced Melanoma in Anti-Programmed Death-1/Programmed Death-Ligand 1 (PD-1/L1)-Exposed Participants (MK-7902-004/E7080-G000-225/LEAP-004)",
+      "conditions": [
+        "Advanced Melanoma"
+      ],
+      "phases": [
+        "PHASE2"
+      ],
+      "area": "oncology",
+      "protocol_file": "Prot_SAP_000.pdf",
+      "protocol_upload_date": "2024-09-12T18:19",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/36/NCT03776136/Prot_SAP_000.pdf",
+      "icf_url": null,
+      "pages": 144,
+      "mean_chars_per_page": 1826.6,
+      "stopword_ratio": 0.207
+    },
+    {
+      "nct_id": "NCT04106492",
+      "title": "Phase 1/2a Study of SQ3370 in Patients With Advanced Solid Tumors",
+      "conditions": [
+        "Cancer"
+      ],
+      "phases": [
+        "PHASE1",
+        "PHASE2"
+      ],
+      "area": "oncology",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2024-03-27T13:40",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/92/NCT04106492/Prot_000.pdf",
+      "icf_url": null,
+      "pages": 126,
+      "mean_chars_per_page": 2600.7,
+      "stopword_ratio": 0.235
+    },
+    {
+      "nct_id": "NCT01702571",
+      "title": "A Study of Trastuzumab Emtansine in Participants With Human Epidermal Growth Factor Receptor 2 (HER2)-Positive Breast Cancer Who Have Received Prior Anti-HER2 And Chemotherapy-based Treatment",
+      "conditions": [
+        "Breast Cancer"
+      ],
+      "phases": [
+        "PHASE3"
+      ],
+      "area": "oncology",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2021-07-14T10:18",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/71/NCT01702571/Prot_000.pdf",
+      "icf_url": null,
+      "pages": 107,
+      "mean_chars_per_page": 2382.1,
+      "stopword_ratio": 0.259
+    },
+    {
+      "nct_id": "NCT02921919",
+      "title": "Open-Label Extension and Safety Study of Talazoparib",
+      "conditions": [
+        "Cancer"
+      ],
+      "phases": [
+        "PHASE2"
+      ],
+      "area": "oncology",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2022-06-07T16:32",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/19/NCT02921919/Prot_000.pdf",
+      "icf_url": null,
+      "pages": 60,
+      "mean_chars_per_page": 2778.8,
+      "stopword_ratio": 0.285
+    },
+    {
+      "nct_id": "NCT03647488",
+      "title": "Study of Capmatinib and Spartalizumab Combination Therapy vs Docetaxel in Non-small Cell Lung Cancer",
+      "conditions": [
+        "Carcinoma, Non-Small-Cell Lung"
+      ],
+      "phases": [
+        "PHASE2"
+      ],
+      "area": "oncology",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2021-06-08T03:55",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/88/NCT03647488/Prot_000.pdf",
+      "icf_url": null,
+      "pages": 189,
+      "mean_chars_per_page": 2229.2,
+      "stopword_ratio": 0.248
+    },
+    {
+      "nct_id": "NCT04501861",
+      "title": "Hemodynamic Effect of Norepinephrine Versus Vasopressin on the Pulmonary Circulation in Cardiac Surgery Patients:",
+      "conditions": [
+        "Cardiac Disease"
+      ],
+      "phases": [
+        "PHASE3"
+      ],
+      "area": "cardiovascular",
+      "protocol_file": "Prot_SAP_000.pdf",
+      "protocol_upload_date": "2024-10-08T10:23",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/61/NCT04501861/Prot_SAP_000.pdf",
+      "icf_url": "https://cdn.clinicaltrials.gov/large-docs/61/NCT04501861/ICF_001.pdf",
+      "pages": 12,
+      "mean_chars_per_page": 2346.2,
+      "stopword_ratio": 0.266
+    },
+    {
+      "nct_id": "NCT00690521",
+      "title": "A Comparison of Hydrochlorothiazide and Metolazone in Combination With Furosemide in Congestive Heart Failure Patients",
+      "conditions": [
+        "Congestive Heart Failure"
+      ],
+      "phases": [
+        "NA"
+      ],
+      "area": "cardiovascular",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2024-01-23T18:28",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/21/NCT00690521/Prot_000.pdf",
+      "icf_url": "https://cdn.clinicaltrials.gov/large-docs/21/NCT00690521/ICF_001.pdf",
+      "pages": 14,
+      "mean_chars_per_page": 2185.4,
+      "stopword_ratio": 0.304
+    },
+    {
+      "nct_id": "NCT01742117",
+      "title": "Tailored Antiplatelet Therapy Following PCI",
+      "conditions": [
+        "Coronary Artery Disease",
+        "Acute Coronary Syndrome",
+        "Stenosis"
+      ],
+      "phases": [
+        "PHASE4"
+      ],
+      "area": "cardiovascular",
+      "protocol_file": "Prot_SAP_000.pdf",
+      "protocol_upload_date": "2021-09-21T15:12",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/17/NCT01742117/Prot_SAP_000.pdf",
+      "icf_url": null,
+      "pages": 62,
+      "mean_chars_per_page": 2867.5,
+      "stopword_ratio": 0.297
+    },
+    {
+      "nct_id": "NCT01560624",
+      "title": "Phase III Clinical Worsening Study of UT-15C in Subjects With PAH Receiving Background Oral Monotherapy",
+      "conditions": [
+        "Pulmonary Arterial Hypertension"
+      ],
+      "phases": [
+        "PHASE3"
+      ],
+      "area": "cardiovascular",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2019-11-20T11:01",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/24/NCT01560624/Prot_000.pdf",
+      "icf_url": null,
+      "pages": 87,
+      "mean_chars_per_page": 2187.5,
+      "stopword_ratio": 0.25
+    },
+    {
+      "nct_id": "NCT03595982",
+      "title": "Is Procardia XL 60 mg Q Daily Equivalent to 30 mg XL Given Twice Daily?",
+      "conditions": [
+        "Hypertension in Pregnancy",
+        "Hypertension in Postpartum"
+      ],
+      "phases": [
+        "PHASE4"
+      ],
+      "area": "cardiovascular",
+      "protocol_file": "Prot_SAP_000.pdf",
+      "protocol_upload_date": "2022-06-01T09:47",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/82/NCT03595982/Prot_SAP_000.pdf",
+      "icf_url": null,
+      "pages": 13,
+      "mean_chars_per_page": 2855.9,
+      "stopword_ratio": 0.321
+    },
+    {
+      "nct_id": "NCT01206062",
+      "title": "Systolic Blood Pressure Intervention Trial",
+      "conditions": [
+        "Hypertension"
+      ],
+      "phases": [
+        "NA"
+      ],
+      "area": "cardiovascular",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2017-09-21T11:11",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/62/NCT01206062/Prot_000.pdf",
+      "icf_url": "https://cdn.clinicaltrials.gov/large-docs/62/NCT01206062/ICF_001.pdf",
+      "pages": 117,
+      "mean_chars_per_page": 2992.3,
+      "stopword_ratio": 0.287
+    },
+    {
+      "nct_id": "NCT04164732",
+      "title": "Study of Efficacy of Oral Sacubitril/Valsartan in Adult Patients With Non-obstructive Hypertrophic Cardiomyopathy",
+      "conditions": [
+        "Cardiomyopathy, Hypertrophic"
+      ],
+      "phases": [
+        "PHASE2"
+      ],
+      "area": "cardiovascular",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2024-08-05T09:44",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/32/NCT04164732/Prot_000.pdf",
+      "icf_url": null,
+      "pages": 73,
+      "mean_chars_per_page": 2445.4,
+      "stopword_ratio": 0.278
+    },
+    {
+      "nct_id": "NCT05223335",
+      "title": "Clopidogrel Monotherapy in Patients With High Bleeding Risk",
+      "conditions": [
+        "Bleeding Complications"
+      ],
+      "phases": [
+        "PHASE4"
+      ],
+      "area": "other",
+      "protocol_file": "Prot_SAP_001.pdf",
+      "protocol_upload_date": "2024-02-12T13:50",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/35/NCT05223335/Prot_SAP_001.pdf",
+      "icf_url": null,
+      "pages": 13,
+      "mean_chars_per_page": 3933.4,
+      "stopword_ratio": 0.232
+    },
+    {
+      "nct_id": "NCT03672292",
+      "title": "Evaluate Safety and Efficacy of the Coadministration of Ibrexafungerp With Voriconazole in Patients With Invasive Pulmonary Aspergillosis",
+      "conditions": [
+        "Invasive Pulmonary Aspergillosis"
+      ],
+      "phases": [
+        "PHASE2"
+      ],
+      "area": "other",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2024-04-06T21:32",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/92/NCT03672292/Prot_000.pdf",
+      "icf_url": null,
+      "pages": 123,
+      "mean_chars_per_page": 2153.0,
+      "stopword_ratio": 0.28
+    },
+    {
+      "nct_id": "NCT02397889",
+      "title": "Ketamine as a Treatment for Post-Traumatic Stress Disorder (PTSD)",
+      "conditions": [
+        "Posttraumatic Stress Disorder (PTSD)"
+      ],
+      "phases": [
+        "PHASE2",
+        "PHASE3"
+      ],
+      "area": "other",
+      "protocol_file": "Prot_SAP_000.pdf",
+      "protocol_upload_date": "2020-12-29T14:02",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/89/NCT02397889/Prot_SAP_000.pdf",
+      "icf_url": null,
+      "pages": 45,
+      "mean_chars_per_page": 2661.0,
+      "stopword_ratio": 0.287
+    },
+    {
+      "nct_id": "NCT03151551",
+      "title": "A Study of Ixekizumab (LY2439821) Versus Adalimumab in Participants With Psoriatic Arthritis",
+      "conditions": [
+        "Psoriatic Arthritis"
+      ],
+      "phases": [
+        "PHASE4"
+      ],
+      "area": "other",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2019-02-22T17:14",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/51/NCT03151551/Prot_000.pdf",
+      "icf_url": null,
+      "pages": 114,
+      "mean_chars_per_page": 2137.9,
+      "stopword_ratio": 0.241
+    },
+    {
+      "nct_id": "NCT01710137",
+      "title": "Varenicline for Nicotine Dependence Among Those With HIV/AIDS",
+      "conditions": [
+        "Nicotine Dependence"
+      ],
+      "phases": [
+        "PHASE3"
+      ],
+      "area": "other",
+      "protocol_file": "Prot_SAP_000.pdf",
+      "protocol_upload_date": "2019-08-14T10:54",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/37/NCT01710137/Prot_SAP_000.pdf",
+      "icf_url": null,
+      "pages": 37,
+      "mean_chars_per_page": 4208.3,
+      "stopword_ratio": 0.271
+    },
+    {
+      "nct_id": "NCT03091920",
+      "title": "Trial of IW-1973, A Stimulator of Soluble Guanylate Cyclase (sGC) in Patients With Stable Type 2 Diabetes and Hypertension",
+      "conditions": [
+        "Diabetes Mellitus, Type 2",
+        "Hypertension"
+      ],
+      "phases": [
+        "PHASE2"
+      ],
+      "area": "other",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2020-07-31T16:44",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/20/NCT03091920/Prot_000.pdf",
+      "icf_url": null,
+      "pages": 78,
+      "mean_chars_per_page": 1911.8,
+      "stopword_ratio": 0.244
+    },
+    {
+      "nct_id": "NCT04957758",
+      "title": "Phase 2 Clinical Trial to Evaluate OC-01 Nasal Spray in Subjects With Neurotrophic Keratopathy",
+      "conditions": [
+        "Neurotrophic Keratopathy"
+      ],
+      "phases": [
+        "PHASE2"
+      ],
+      "area": "other",
+      "protocol_file": "Prot_000.pdf",
+      "protocol_upload_date": "2024-03-08T14:29",
+      "protocol_url": "https://cdn.clinicaltrials.gov/large-docs/58/NCT04957758/Prot_000.pdf",
+      "icf_url": null,
+      "pages": 73,
+      "mean_chars_per_page": 1627.6,
+      "stopword_ratio": 0.239
+    }
+  ]
+}
