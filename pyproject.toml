@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "protocol-consistency-agent"
+version = "0.1.0"
+description = "Replication of an AI protocol-extraction pipeline and a cross-section consistency agent for clinical trial protocols."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Sohen Patel" }]
+requires-python = ">=3.10"
+dependencies = [
+  "anthropic>=1.0",
+  "openai>=1.40",
+  "pymupdf>=1.24",
+  "numpy>=1.26",
+  "requests>=2.31",
+  "python-dotenv>=1.0",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+cohere = ["cohere>=5.0"]
+tables = ["transformers>=4.40", "timm>=0.9", "torch>=2.2", "pillow>=10.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+consistency-agent = "consistency_agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["consistency_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

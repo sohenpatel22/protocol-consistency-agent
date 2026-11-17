@@ -1,0 +1,24 @@
+# secrets
+.env
+*.key
+
+# downloaded protocol PDFs and run artefacts (re-create with `consistency-agent sample`)
+data/raw/
+data/cache/
+data/extractions/
+data/ground_truth/
+data/judgements/
+data/findings/
+data/bench/
+runs/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+*.log
