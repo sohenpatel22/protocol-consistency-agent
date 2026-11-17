@@ -10,6 +10,9 @@
      protocol_inconsistency -> suggested protocol edit (sponsor) / draft sponsor query (site)
 4. Re-check: apply the proposed value to a copy and run the checks again. If the conflict
    is still there, or a new one appears in linked fields, escalate instead.
+If round 1 can't settle it, round 2 widens the search (hybrid search over a wide candidate
+set, reranked if a reranker is set, plus the exact pages each value came from) and tries
+again. After SETTINGS.fix_rounds rounds it goes to a person.
 Nothing is written to the extraction until a reviewer approves (see review()).
 """
 from __future__ import annotations
@@ -17,6 +20,7 @@ from __future__ import annotations
 import copy
 import json
 
+from ..config import SETTINGS
 from ..llm import LLMError, complete_json
 from ..replication.elements import element_for_field, get_path, set_path
 from ..replication.pdfparse import load_chunks
@@ -105,10 +109,58 @@ def confirm_suspect(nct_id: str, extraction: dict, f: Finding, retriever: Retrie
             "pages": sorted({p for c in chunks for p in range(c.page_start, c.page_end + 1)})}
 
 
+def _source_pages(f: Finding, context: dict | None) -> list[int]:
+    """Pages each conflicting value was extracted from (provenance), most specific first."""
+    prov = (context or {}).get("provenance", {})
+    pages: list[int] = []
+    for fid in f.fields:
+        el = element_for_field(fid)
+        p = prov.get(el.key, {}) if el else {}
+        cited = [v.get("page") for k, v in p.get("fields", {}).items() if fid.split(".", 1)[1].startswith(k)]
+        pages += [x for x in cited if isinstance(x, int)] or p.get("pages", [])[:4]
+    return list(dict.fromkeys(pages))[:8]
+
+
+def widen(f: Finding, retriever: Retriever, context: dict | None = None, char_budget: int = 40000) -> list:
+    """Round 2: hybrid search over a wide candidate set (reranked if a reranker is set),
+    plus the exact source pages of each value and their neighbours."""
+    queries = []
+    for fid in f.fields:
+        el = element_for_field(fid)
+        if el:
+            queries += el.queries + [f"{el.label} conditions exceptions part arm cohort"]
+    queries += [e.quote[:300] for e in f.evidence if e.quote.strip()]
+    wide = retriever.retrieve(list(dict.fromkeys(queries)) or [f.explanation], top_k=12,
+                              char_budget=char_budget // 2, wide=True)
+    opened = retriever.pages(_source_pages(f, context))
+    seen, out, used = set(), [], 0
+    for c in sorted(wide + opened, key=lambda c: c.order):
+        if c.id in seen or used + len(c.text) > char_budget:
+            continue
+        seen.add(c.id)
+        out.append(c)
+        used += len(c.text)
+    return out
+
+
 def propose(nct_id: str, extraction: dict, f: Finding, retriever: Retriever | None = None,
             context: dict | None = None) -> dict:
+    """Up to SETTINGS.fix_rounds rounds; round 2 widens the search. Stops at the first usable answer."""
     retriever = retriever or Retriever(nct_id, load_chunks(nct_id))
-    chunks = requery(f, retriever)
+    rounds = []
+    out: dict = {}
+    for r in range(max(1, SETTINGS.fix_rounds)):
+        chunks = requery(f, retriever) if r == 0 else widen(f, retriever, context)
+        out = _decide_once(extraction, f, chunks)
+        action = decide(out, recheck(extraction, f, out, context))
+        rounds.append({"round": r + 1, "pages": out["requery_pages"], "cause": out.get("cause"), "action": action})
+        if action != "escalate":
+            break
+    out["rounds"] = rounds
+    return out
+
+
+def _decide_once(extraction: dict, f: Finding, chunks: list) -> dict:
     excerpt = format_context(chunks)
     blind = [read_blind(fid, excerpt) for fid in f.fields[:3]]
     values = {fid: get_path(extraction, fid) for fid in f.fields}
