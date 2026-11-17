@@ -70,6 +70,41 @@ def read_blind(fid: str, excerpt: str) -> dict:
     return {"field": fid, "answers": answers}
 
 
+CONFIRM_SYSTEM = (
+    "An automated sweep of a clinical-trial protocol extraction flagged a possible contradiction between "
+    "two sections. It only saw the extracted values, not the protocol. You get the suspect, what the "
+    "protocol says about each field (read independently, with quotes) and the protocol excerpts. Decide "
+    "whether the conflict is real. It is NOT real if the values are equivalent, apply under different "
+    "conditions that the protocol states, or one of them is simply not about the same thing. Reply with "
+    'JSON: {"confirmed": true|false, "protocol_quote": "<verbatim quote supporting your decision>", '
+    '"likely_cause": "extraction_error|missing_condition|protocol_inconsistency|not_a_conflict", "reason": "..."}'
+)
+
+
+def confirm_suspect(nct_id: str, extraction: dict, f: Finding, retriever: Retriever | None = None) -> dict:
+    """Open-sweep findings are only suspects: keep one only if the protocol text backs it up."""
+    retriever = retriever or Retriever(nct_id, load_chunks(nct_id))
+    chunks = requery(f, retriever)
+    excerpt = format_context(chunks)
+    blind = [read_blind(fid, excerpt) for fid in f.fields[:3]]
+    values = {fid: get_path(extraction, fid) for fid in f.fields}
+    user = "\n\n".join([
+        f"Suspect: {f.explanation}",
+        f"Extracted values:\n{json.dumps(values, indent=1, ensure_ascii=False)}",
+        "What the protocol says (read without seeing the extracted values):\n"
+        + json.dumps(blind, indent=1, ensure_ascii=False),
+        f"Protocol excerpts:\n{excerpt}",
+    ])
+    out = complete_json("verifier", CONFIRM_SYSTEM, user, max_tokens=3000)
+    if not isinstance(out, dict):
+        out = {}
+    quote = out.get("protocol_quote") or ""
+    verified = bool(quote) and N.norm_quote(quote) in N.norm_quote(excerpt)
+    return {"confirmed": bool(out.get("confirmed")) and verified, "protocol_quote": quote,
+            "quote_verified": verified, "likely_cause": out.get("likely_cause", ""), "reason": out.get("reason", ""),
+            "pages": sorted({p for c in chunks for p in range(c.page_start, c.page_end + 1)})}
+
+
 def propose(nct_id: str, extraction: dict, f: Finding, retriever: Retriever | None = None,
             context: dict | None = None) -> dict:
     retriever = retriever or Retriever(nct_id, load_chunks(nct_id))

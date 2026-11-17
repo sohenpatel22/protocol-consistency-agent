@@ -142,6 +142,39 @@ def test_open_sweep_needs_two_sections(doc):
     assert len(found) == 1 and dropped == 1 and "Double-Blind" in flat[title]
 
 
+def test_sweep_suspects_need_protocol_confirmation(doc):
+    from consistency_agent.replication.pdfparse import Chunk
+    title = "general_information.general_information.study_title"
+    disc = "adverse_events.safety_monitoring_and_management.discontinuation_criteria"
+
+    def fake(call, confirm=True):
+        if "Relationship type: other_conflict" in call.user:
+            assert "[Study Title" in call.user          # the sweep sees what each field is
+            return {"conflicts": [{"fields": [title, disc],
+                                   "quotes": [{"field": title, "quote": "Double-Blind"},
+                                              {"field": disc, "quote": "QTc > 500 ms"}],
+                                   "explanation": "suspect", "confidence": 0.6}]}
+        if "Data field:" in call.user:
+            return {"answers": [{"value": "double-blind", "quote": "double-blind study", "page": 2}]}
+        if "Suspect:" in call.user:
+            return {"confirmed": confirm, "protocol_quote": "double-blind study", "likely_cause": "protocol_inconsistency"}
+        return {"conflicts": []}
+
+    llm.set_override(fake)
+    findings, stats = check(doc, "llm")                 # no protocol to read: stays a suspect
+    assert not any(f.type == "other_conflict" for f in findings) and stats["n_suspects_dropped"] == 1
+
+    chunk = Chunk("c0", 0, "s0", 0, 1, ["1 Synopsis"], 2, 2, "This is a randomized double-blind study.")
+    ctx = {"retriever": Retriever("X", [chunk], backend="bm25")}
+    findings, stats = check(doc, "llm", ctx)            # protocol confirms it: reported
+    f = next(f for f in findings if f.type == "other_conflict")
+    assert f.extra["confirmed_in_protocol"]["quote_verified"] and f.likely_cause == "protocol_inconsistency"
+
+    llm.set_override(lambda call: fake(call, confirm=False))
+    findings, stats = check(doc, "llm", ctx)            # protocol doesn't back it: dropped
+    assert stats["n_suspects_dropped"] == 1
+
+
 def test_hybrid_check_merges_sources(doc):
     case = next(c for c in generate(doc, "X") if c.operator == "dose_change")
     llm.set_override(lambda call: {"conflicts": []})

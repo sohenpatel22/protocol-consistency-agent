@@ -29,6 +29,21 @@ def _block(fs) -> str:
     return "\n".join(f"- {f.id}: {f.text[:MAX_CHARS]}" for f in fs)
 
 
+def _labelled(fs, provenance: dict) -> str:
+    from ..replication.elements import element_for_field
+    lines = []
+    for f in fs:
+        el = element_for_field(f.id)
+        tag = el.label if el else f.section
+        prov = provenance.get(el.key, {}) if el else {}
+        if prov.get("sections"):
+            tag += f"; {prov['sections'][0][:60]}"
+        if prov.get("pages"):
+            tag += f"; pp. {prov['pages'][0]}-{prov['pages'][-1]}"
+        lines.append(f"- {f.id} [{tag}]: {f.text[:800]}")
+    return "\n".join(lines)
+
+
 def verify_link(link: Link, fields: list[N.Field], context: dict | None = None) -> tuple[list[Finding], int]:
     a, b = link_fields(fields, link)
     if not a or not b:
@@ -41,8 +56,15 @@ def verify_link(link: Link, fields: list[N.Field], context: dict | None = None) 
         cyc = [f for f in fields if f.id.startswith("interventions.") and N.cycle_length_days(f.text)]
         if cyc:
             extra = f"\nCycle information: {cyc[0].id}: {cyc[0].text[:300]}"
-    user = (f"Relationship type: {link.type}\nQuestion: {link.question}\n\nSide A fields:\n{_block(a)}\n\n"
-            f"Side B fields:\n{_block(b) if link.a != link.b else '(same as side A)'}{extra}")
+    if link.type == "other_conflict":
+        # the sweep only sees the JSON, so give it cheap context: what each field means and where it came from
+        extra += ("\nNot conflicts: equivalent units or formats, and values that differ because they apply to "
+                  "different parts, arms, cohorts or conditions.")
+        user = (f"Relationship type: {link.type}\nQuestion: {link.question}{extra}\n\n"
+                f"All fields (id [what it is; protocol source]: value):\n{_labelled(a, (context or {}).get('provenance', {}))}")
+    else:
+        user = (f"Relationship type: {link.type}\nQuestion: {link.question}\n\nSide A fields:\n{_block(a)}\n\n"
+                f"Side B fields:\n{_block(b) if link.a != link.b else '(same as side A)'}{extra}")
     out = complete_json("verifier", SYSTEM, user, max_tokens=8000)
     findings, dropped = [], 0
     for c in (out.get("conflicts", []) if isinstance(out, dict) else []):

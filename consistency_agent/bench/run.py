@@ -76,7 +76,7 @@ def run(bases: dict[str, dict], modes: list[str], seed: int = 0, operators: list
     for mode in modes:
         rows = []
         for doc_id, doc in bases.items():
-            ctx = {"registry_nct_id": registry.get(doc_id)}
+            ctx = {"registry_nct_id": registry.get(doc_id), "nct_id": doc_id}
             base_f, _ = check(doc, mode, ctx, log=lambda *_: None)
             base_keys = {f.key() for f in base_f}
             for case in cases_by_doc[doc_id]:

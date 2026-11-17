@@ -23,9 +23,41 @@ def check(extraction: dict, mode: str = "hybrid", context: dict | None = None, l
         from .verifier import run_verifier
         llm_f, vstats = run_verifier(extraction, context, log=log)
         stats.update(vstats)
-    findings = rank(merge(rule_f, llm_f))
+    merged = merge(rule_f, llm_f)
+    # Open-sweep findings that no typed check confirmed are only suspects: the sweep saw the JSON,
+    # not the protocol. Keep one only if the protocol text backs it up; otherwise list it separately.
+    findings = [f for f in merged if not (f.type == "other_conflict" and f.source == "llm")]
+    suspects = [f for f in merged if f.type == "other_conflict" and f.source == "llm"]
+    stats["suspects"] = []
+    for f in suspects:
+        result = _confirm(f, extraction, context or {}, log)
+        if result.get("confirmed"):
+            f.extra["confirmed_in_protocol"] = result
+            if result.get("likely_cause") in ("extraction_error", "missing_condition", "protocol_inconsistency"):
+                f.likely_cause = result["likely_cause"]
+            findings.append(f)
+        else:
+            stats["suspects"].append({**f.to_dict(), "confirmation": result})
+    findings = rank(findings)
     stats["n_findings"] = len(findings)
+    stats["n_suspects_dropped"] = len(stats["suspects"])
     return findings, stats
+
+
+def _confirm(f: Finding, extraction: dict, context: dict, log) -> dict:
+    """Check a sweep suspect against the protocol. Without a protocol to read, it stays a suspect."""
+    from ..config import RAW
+    from ..llm import LLMError
+    from .resolve import confirm_suspect
+    nct = context.get("nct_id")
+    retriever = context.get("retriever")
+    if retriever is None and not (nct and (RAW / f"{nct}.pdf").exists()):
+        return {"confirmed": False, "reason": "no protocol available to confirm against"}
+    try:
+        return confirm_suspect(nct or "", extraction, f, retriever)
+    except (LLMError, ValueError) as exc:
+        log(f"  confirm suspect: ERROR {exc}")
+        return {"confirmed": False, "reason": f"error: {exc}"}
 
 
 def attach_sources(findings: list[Finding], provenance: dict) -> None:
@@ -46,12 +78,14 @@ def attach_sources(findings: list[Finding], provenance: dict) -> None:
 
 def run(nct_id: str, extraction: dict, mode: str = "hybrid", context: dict | None = None,
         provenance: dict | None = None, log=print) -> dict:
+    context = {**(context or {}), "nct_id": nct_id, "provenance": provenance or {}}
     findings, stats = check(extraction, mode, context, log)
     attach_sources(findings, provenance or {})
+    suspects = stats.pop("suspects", [])
     out_dir = FINDINGS_OUT / nct_id
     out_dir.mkdir(parents=True, exist_ok=True)
     report = {"nct_id": nct_id, "mode": mode, "extraction_digest": audit.digest(extraction), "stats": stats,
-              "findings": [f.to_dict() for f in findings]}
+              "findings": [f.to_dict() for f in findings], "unconfirmed_suspects": suspects}
     (out_dir / f"findings_{mode}.json").write_text(json.dumps(report, indent=1, ensure_ascii=False), encoding="utf-8")
     (out_dir / f"report_{mode}.md").write_text(to_markdown(report), encoding="utf-8")
     for f in findings:
@@ -81,6 +115,10 @@ def to_markdown(report: dict) -> str:
             where = f" (protocol p. {', '.join(str(p) for p in src['pages'])})" if src.get("pages") else ""
             lines.append(f"  - `{e['field']}`{where}: \"{e['quote'][:300]}\"")
         lines.append("")
+    if report.get("unconfirmed_suspects"):
+        lines += ["## Open-sweep suspects the protocol did not confirm (not reported as findings)", ""]
+        for s in report["unconfirmed_suspects"]:
+            lines.append(f"- {s['explanation']} ({s['confirmation'].get('reason', '')})")
     return "\n".join(lines)
 
 
