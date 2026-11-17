@@ -73,11 +73,25 @@ class Settings:
     standalone_char_limit: int = 440_000  # ~110k tokens for gpt-4o's 128k window
     # ask the extractor for a page + quote per field (not in the paper; off for a faithful replication)
     field_citations: bool = field(default_factory=lambda: os.getenv("AGENT_FIELD_CITATIONS", "0") == "1")
+    # ---- Run B upgrades (all off by default = the paper's setup) ----
+    # "dense" = embeddings only (paper); "hybrid" = embeddings + BM25 keyword search, fused
+    retrieval: str = field(default_factory=lambda: os.getenv("AGENT_RETRIEVAL", "dense"))
+    # "cohere:<model>" turns on a reranker: retrieve wide_k candidates, keep the best
+    rerank: str = field(default_factory=lambda: os.getenv("AGENT_RERANK", ""))
+    wide_k: int = 50
+    # let a field carry several values with their conditions ("200 mg (Part A); 175 mg (Part B)")
+    conditional_values: bool = field(default_factory=lambda: os.getenv("AGENT_CONDITIONAL_VALUES", "0") == "1")
+    # thinking effort for models that support it (Opus/Sonnet 5.x): low | medium | high
+    effort: str = field(default_factory=lambda: os.getenv("AGENT_EFFORT", ""))
+    fix_rounds: int = 2               # fix-up agent: rounds before a person decides
+    model_overrides: dict = field(default_factory=dict)
 
     def model(self, role: str) -> str:
         env = os.getenv(f"AGENT_MODEL_{role.upper()}")
         if env:
             return env
+        if role in self.model_overrides:
+            return self.model_overrides[role]
         try:
             return PROFILES[self.profile][role]
         except KeyError as exc:
@@ -85,6 +99,29 @@ class Settings:
 
 
 SETTINGS = Settings()
+
+# Run A = the paper; Run B adds one thing at a time so every gain can be explained.
+# Each variant writes its extractions to its own folder (data/extractions/<system>).
+VARIANTS: dict[str, dict] = {
+    "A": {"system": "rag", "settings": {}, "models": {}},
+    "B1": {"system": "rag_b1", "settings": {},
+           "models": {"extractor": "anthropic:claude-opus-5-5", "soe_vision": "anthropic:claude-opus-5-5"}},
+    "B2": {"system": "rag_b2",
+           "settings": {"retrieval": "hybrid", "rerank": "cohere:rerank-v3.5", "conditional_values": True,
+                        "field_citations": True},
+           "models": {"extractor": "anthropic:claude-opus-5-5", "soe_vision": "anthropic:claude-opus-5-5"}},
+}
+
+
+def apply_variant(name: str) -> str:
+    """Switch SETTINGS to a run variant; returns the extraction system name it writes to."""
+    v = VARIANTS[name]
+    for k, val in v["settings"].items():
+        if k == "rerank" and not os.getenv("COHERE_API_KEY"):
+            continue                          # no Cohere key: run without the reranker
+        setattr(SETTINGS, k, val)
+    SETTINGS.model_overrides = dict(v["models"])
+    return v["system"]
 
 
 def ensure_dirs() -> None:

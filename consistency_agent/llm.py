@@ -116,13 +116,14 @@ def _anthropic(model: str, call: Call, provider: str = "anthropic") -> tuple[str
         })
     content.append({"type": "text", "text": call.user})
     client = _client(provider)
+    kwargs: dict[str, Any] = dict(model=model, max_tokens=call.max_tokens, system=call.system,
+                                  messages=[{"role": "user", "content": content}])
+    if SETTINGS.effort and _supports_effort(model):
+        kwargs["output_config"] = {"effort": SETTINGS.effort}
     try:
-        resp = client.messages.create(
-            model=model,
-            max_tokens=call.max_tokens,
-            system=call.system,
-            messages=[{"role": "user", "content": content}],
-        )
+        # stream so long outputs (thinking + JSON) don't hit request timeouts
+        with client.messages.stream(**kwargs) as stream:
+            resp = stream.get_final_message()
     except anthropic.BadRequestError as exc:
         raise LLMError(f"Anthropic rejected the request ({model}): {exc}") from exc
     if resp.stop_reason == "refusal":
@@ -130,6 +131,12 @@ def _anthropic(model: str, call: Call, provider: str = "anthropic") -> tuple[str
     text = "".join(b.text for b in resp.content if b.type == "text")
     usage = {"input_tokens": resp.usage.input_tokens, "output_tokens": resp.usage.output_tokens}
     return text, usage
+
+
+def _supports_effort(model: str) -> bool:
+    """The effort setting exists on the newer Claude models (Opus 4.5+, the 5.x family)."""
+    return any(t in model for t in ("opus-4-5", "opus-4-6", "opus-4-7", "opus-4-8", "opus-5", "sonnet-5",
+                                    "sonnet-4-6", "haiku-5", "fable"))
 
 
 def _openai(model: str, call: Call) -> tuple[str, dict]:
@@ -151,9 +158,27 @@ def _openai(model: str, call: Call) -> tuple[str, dict]:
     return text, usage
 
 
+# Rough list prices, US$ per million tokens (input, output). Check current pricing before a big run;
+# these are only used to estimate cost in `consistency-agent cost`.
+PRICES = {
+    "claude-opus-5-5": (4.0, 20.0), "claude-sonnet-4-5": (3.0, 15.0), "claude-opus-4-5": (5.0, 25.0),
+    "claude-haiku-4-5": (1.0, 5.0), "claude-haiku-5-5": (0.10, 0.50), "claude-sonnet-5-5": (2.0, 10.0),
+    "gpt-4o": (2.50, 10.0), "gpt-5": (1.25, 10.0),
+}
+
+
+def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    name = model.split(":", 1)[-1]
+    price = next((v for k, v in PRICES.items() if k in name), None)
+    if price is None:
+        return None
+    return (input_tokens * price[0] + output_tokens * price[1]) / 1e6
+
+
 def _log(role: str, model: str, usage: dict, seconds: float) -> None:
     RUNS.mkdir(parents=True, exist_ok=True)
+    cost = estimate_cost(model, usage.get("input_tokens", 0), usage.get("output_tokens", 0))
     rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "role": role, "model": model,
-           "seconds": round(seconds, 2), **usage}
+           "seconds": round(seconds, 2), "usd_est": None if cost is None else round(cost, 5), **usage}
     with _lock, open(RUNS / "usage.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
