@@ -120,6 +120,20 @@ consistency-agent cost                            # tokens, time and estimated $
 - **Without `COHERE_API_KEY`**, retrieval falls back to BM25 and the reranker is off. Add the key for a faithful Run A.
 - **Rough API cost for both runs: US$450–700.** Start with `--limit 2`; `consistency-agent cost` tracks what you've spent.
 
+## One-protocol pilot
+
+For a quick, cheap demonstration on one real protocol (default NCT02080260, a regorafenib trial in pancreatic cancer):
+
+```bash
+consistency-agent pilot --max-usd 15
+```
+
+It builds the reference answers, runs the paper's pipeline (Run A) and ours (B2, Claude Opus 5.5 at low effort), checks B2 for conflicts, runs the fix-up agent (B3), scores all three with the judge, and runs the planted-contradiction benchmark. It writes `results/pilot_<NCT>.md`, which the demo app shows in its last tab.
+
+- **Spending cap:** it stops calling models once `--max-usd` is reached (estimated from list prices). A stopped run resumes where it left off.
+- **Options:** `--no-baseline` skips Run A to save about $2; `--bench-llm` adds the LLM to the benchmark (about $5 more).
+- **Rough cost:** about $10–15 per protocol.
+
 ## Demo app
 
 ```bash

@@ -335,3 +335,12 @@ def test_weighted_kappa_and_cost():
     assert weighted_kappa(a, a, 2) == 1.0
     assert weighted_kappa(a, [5, 4, 3, 1, 2, 4], 2) > 0.9
     assert abs(estimate_cost("anthropic:claude-opus-5-5", 1_000_000, 100_000) - 6.0) < 1e-9
+
+
+def test_spending_cap_stops_calls(monkeypatch):
+    monkeypatch.setenv("AGENT_MAX_USD", "1.0")
+    monkeypatch.setattr(llm, "_spent", 1.2)
+    with pytest.raises(llm.BudgetExceeded):
+        llm._check_budget()
+    monkeypatch.setattr(llm, "_spent", 0.5)
+    llm._check_budget()                          # under the cap: no error

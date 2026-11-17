@@ -24,7 +24,7 @@ from consistency_agent.agent.rules import run_rules  # noqa: E402
 from consistency_agent.bench import metrics  # noqa: E402
 from consistency_agent.bench.inject import OPERATORS, generate  # noqa: E402
 from consistency_agent.bench.run import evaluate_case  # noqa: E402
-from consistency_agent.config import EXTRACTIONS  # noqa: E402
+from consistency_agent.config import EXTRACTIONS, RESULTS  # noqa: E402
 from consistency_agent.replication.elements import get_path  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "synthetic_extraction.json"
@@ -111,7 +111,8 @@ st.title("Study Data Consistency Agent")
 st.caption("Checks that the six sections extracted from a clinical trial protocol agree with each other, "
            "explains each conflict with evidence, and proposes a fix that a person approves.")
 
-tabs = st.tabs(["1 · Extraction", "2 · Check", "3 · Plant a contradiction", "4 · Fix and review", "5 · Benchmark"])
+tabs = st.tabs(["1 · Extraction", "2 · Check", "3 · Plant a contradiction", "4 · Fix and review", "5 · Benchmark",
+                "6 · Pilot results"])
 
 # ---------- 1. extraction ----------
 with tabs[0]:
@@ -234,3 +235,13 @@ with tabs[4]:
                        "False alarms": r["n_false_pos"]} for r in rows], use_container_width=True)
         st.caption("The synthetic protocol was written alongside the rules, so this is a demonstration, not a result. "
                    "Real numbers come from the 23 public protocols.")
+
+# ---------- 6. pilot results ----------
+with tabs[5]:
+    st.subheader("Pilot on a real protocol")
+    runs = sorted(RESULTS.glob("pilot_*.md"))
+    if not runs:
+        st.info("No pilot yet. Add API keys to .env and run:  consistency-agent pilot --max-usd 15")
+    else:
+        pick = st.selectbox("Pilot", runs, format_func=lambda p: p.stem.replace("pilot_", ""))
+        st.markdown(pick.read_text(encoding="utf-8"))
