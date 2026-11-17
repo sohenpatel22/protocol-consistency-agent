@@ -120,6 +120,22 @@ consistency-agent cost                            # tokens, time and estimated $
 - **Without `COHERE_API_KEY`**, retrieval falls back to BM25 and the reranker is off. Add the key for a faithful Run A.
 - **Rough API cost for both runs: US$450–700.** Start with `--limit 2`; `consistency-agent cost` tracks what you've spent.
 
+## Demo app
+
+```bash
+pip install -e ".[demo]"
+streamlit run app/demo.py
+```
+
+It runs offline on a synthetic protocol (rule checks only, no API key, no cost). The tabs:
+1. **Extraction:** the six sections.
+2. **Check:** findings with severity, evidence and source pages.
+3. **Plant a contradiction:** watch it get caught, or watch a look-alike correctly *not* get flagged.
+4. **Fix and review:** re-check a proposed value, approve or reject it, and see the audit trail.
+5. **Benchmark:** recall, precision and look-alike false alarms.
+
+With keys in `.env`, switch the checker to "Rules + LLM" and pick a real extraction from the sidebar.
+
 ## Limits
 
 - **Not the paper's data.** The sample is different but drawn the same way. Our reference answers are model-made until someone works through the review CSV.

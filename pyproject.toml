@@ -24,6 +24,7 @@ dependencies = [
 cohere = ["cohere>=5.0"]
 tables = ["transformers>=4.40", "timm>=0.9", "torch>=2.2", "pillow>=10.0"]
 dev = ["pytest>=8.0"]
+demo = ["streamlit>=1.40"]
 
 [project.scripts]
 consistency-agent = "consistency_agent.cli:main"
