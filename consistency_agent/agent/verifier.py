@@ -4,11 +4,17 @@ The model must quote the fields it relies on. Quotes are checked against the sto
 and a conflict with a made-up quote is dropped."""
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 
+from .. import llm
+from ..config import SETTINGS
 from ..llm import LLMError, complete_json
 from . import normalize as N
 from .linkmap import LINKS, Evidence, Finding, Link, link_fields
+
+_CACHE: dict[str, tuple[list[dict], int]] = {}
 
 SYSTEM = (
     "You check a clinical-trial protocol extraction for contradictions between sections. You are "
@@ -65,7 +71,22 @@ def verify_link(link: Link, fields: list[N.Field], context: dict | None = None) 
     else:
         user = (f"Relationship type: {link.type}\nQuestion: {link.question}\n\nSide A fields:\n{_block(a)}\n\n"
                 f"Side B fields:\n{_block(b) if link.a != link.b else '(same as side A)'}{extra}")
+    # Same prompt, same answer: the benchmark re-checks many planted copies that differ in one
+    # field, so most link prompts are identical to the base document's. Reuse those results.
+    key = None
+    if llm._override is None:
+        key = hashlib.sha256((SETTINGS.model("verifier") + SYSTEM + user).encode("utf-8")).hexdigest()
+        if key in _CACHE:
+            found, dropped = _CACHE[key]
+            return [Finding.from_dict(copy.deepcopy(d)) for d in found], dropped
     out = complete_json("verifier", SYSTEM, user, max_tokens=8000)
+    findings, dropped = _parse(out, link, by_id)
+    if key:
+        _CACHE[key] = ([f.to_dict() for f in findings], dropped)
+    return findings, dropped
+
+
+def _parse(out, link: Link, by_id: dict) -> tuple[list[Finding], int]:
     findings, dropped = [], 0
     for c in (out.get("conflicts", []) if isinstance(out, dict) else []):
         quotes = c.get("quotes") or []
