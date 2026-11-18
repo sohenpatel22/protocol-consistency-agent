@@ -35,24 +35,36 @@ def _extracted_value(extraction: dict, el) -> dict:
 
 
 def judge_protocol(system: str, nct_id: str, log=print) -> dict:
+    """Score every element. Scores from an earlier run are kept; only failed ones are redone.
+    An element is not scored (None, not 0) when its reference answer failed or the judge's reply was unusable.
+    Raises RuntimeError when more than half could not be scored."""
     ext = load(system, nct_id)["extraction"]
     gt = load_gt(nct_id)["items"]
-    scores = {}
+    p = JUDGEMENTS / system / f"{nct_id}.json"
+    scores = json.loads(p.read_text(encoding="utf-8"))["scores"] if p.exists() else {}
     for el in all_elements():
-        ref = gt.get(el.key, {}).get("answer", {})
-        got = _extracted_value(ext, el)
-        if el.key == "soe":
-            got = ext.get("schedule_of_events", {})
-        user = (f"Data element: {el.label}\nReference answer:\n{json.dumps(ref, ensure_ascii=False)}\n\n"
+        if scores.get(el.key, {}).get("score") is not None:
+            continue
+        item = gt.get(el.key, {})
+        if not item or str(item.get("notes", "")).startswith("error:"):
+            scores[el.key] = {"score": None, "reason": "no reference answer for this element"}
+            continue
+        got = ext.get("schedule_of_events", {}) if el.key == "soe" else _extracted_value(ext, el)
+        user = (f"Data element: {el.label}\nReference answer:\n{json.dumps(item.get('answer', {}), ensure_ascii=False)}\n\n"
                 f"Extracted answer:\n{json.dumps(got, ensure_ascii=False)}")
         try:
             out = complete_json("judge", SYSTEM, user, max_tokens=1000)
-            scores[el.key] = {"score": _snap(float(out.get("score", 0))), "reason": out.get("reason", "")}
+            if not isinstance(out, dict) or "score" not in out:
+                raise ValueError("the judge's reply had no 'score'")
+            scores[el.key] = {"score": _snap(float(out["score"])), "reason": out.get("reason", "")}
         except (LLMError, ValueError, TypeError) as exc:
             log(f"  judge {nct_id} {el.key}: ERROR {exc}")
             scores[el.key] = {"score": None, "reason": f"error: {exc}"}
     res = {"nct_id": nct_id, "system": system, "scores": scores, "categories": category_scores(scores)}
-    p = JUDGEMENTS / system / f"{nct_id}.json"
+    unscored = [k for k, v in scores.items() if v["score"] is None]
+    if len(unscored) > len(all_elements()) / 2:
+        raise RuntimeError(f"{len(unscored)} of {len(scores)} elements could not be scored for {system}/{nct_id}: "
+                           f"{scores[unscored[0]]['reason'][:200]}")
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(res, indent=1), encoding="utf-8")
     return res

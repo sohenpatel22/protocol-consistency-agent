@@ -5,7 +5,6 @@ import argparse
 import json
 import sys
 from collections import defaultdict
-from pathlib import Path
 
 from .config import FINDINGS_OUT, EXTRACTIONS, RESULTS, ROOT, RUNS, SETTINGS, ensure_dirs
 
@@ -40,14 +39,16 @@ def cmd_extract(args):
     if system == "rag" and args.variant:
         system = apply_variant(args.variant)        # A -> rag, B1 -> rag_b1, B2 -> rag_b2
     for nct in _ids(args):
-        if extract.out_path(system, nct).exists() and not args.force:
-            print(f"{nct}: exists, skipping (use --force)")
+        if system == "standalone":
+            if extract.out_path(system, nct).exists() and not args.force:
+                print(f"{nct}: exists, skipping (use --force)")
+                continue
+            print(f"  -> {extract.save(standalone.extract_protocol(nct))}")
             continue
-        print(f"{nct}: extracting ({system}, extractor={SETTINGS.model('extractor')}, retrieval={SETTINGS.retrieval}, "
-              f"rerank={SETTINGS.rerank or 'off'}, conditions={SETTINGS.conditional_values})")
-        res = (standalone.extract_protocol(nct) if system == "standalone"
-               else extract.extract_protocol(nct, system=system))
-        print(f"  -> {extract.save(res)}")
+        print(f"{nct}: {system}, extractor={SETTINGS.model('extractor')}, retrieval={SETTINGS.retrieval}, "
+              f"rerank={SETTINGS.rerank or 'off'}, conditions={SETTINGS.conditional_values}")
+        res, how = extract.run_resumable(nct, system, force=args.force)
+        print(f"  {how}: {len(res.get('errors', {}))} element(s) with errors")
 
 
 def cmd_fixup(args):
@@ -61,6 +62,14 @@ def cmd_fixup(args):
         fx = res["fixup"]
         print(f"{nct}: {fx['n_findings']} findings, {fx['n_applied']} fixes applied, {fx['n_escalated']} escalated, "
               f"{fx['n_sponsor_queries']} sponsor queries -> {save(res)}")
+
+
+def cmd_preflight(args):
+    from . import preflight
+    rows = preflight.run(args.nct, live=args.live, max_usd=args.max_usd)
+    print(preflight.to_text(rows))
+    if any(r[1] == preflight.FAIL for r in rows):
+        sys.exit(1)
 
 
 def cmd_pilot(args):
@@ -225,6 +234,10 @@ def main(argv=None):
     p.add_argument("--mode", choices=["rules", "llm", "hybrid"], default="hybrid")
     p.add_argument("--effort", choices=["low", "medium", "high"])
     sel(p)
+    p = add("preflight", cmd_preflight, "check keys, model names and a tiny live call per model before a run")
+    p.add_argument("--nct", default="NCT02080260")
+    p.add_argument("--live", action="store_true", help="also make one tiny call per model (about 10 cents)")
+    p.add_argument("--max-usd", type=float, default=1.0)
     p = add("pilot", cmd_pilot, "one-command pilot on one protocol, with a spending cap")
     p.add_argument("--ids", help="NCT ID(s); default NCT02080260")
     p.add_argument("--max-usd", type=float, default=15.0, help="stop calling models once this is spent")

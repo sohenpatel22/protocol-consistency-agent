@@ -51,14 +51,48 @@ def element_prompt(el: Element, context: str, cite: bool = False, conditions: bo
     )
 
 
+class ExtractionFailed(RuntimeError):
+    """Most fields failed: almost always a setup problem (key, quota, model name), not the protocol."""
+
+
+def _flatten(obj, prefix: str = "") -> dict:
+    out = {}
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            out.update(_flatten(v, f"{prefix}.{k}" if prefix else k))
+            out[f"{prefix}.{k}" if prefix else k] = v
+    return out
+
+
+def _coerce(out, el: Element) -> dict:
+    """Accept the model's answer if it holds this element's fields, even when nested under another key.
+
+    A reply with none of the expected keys is an error, not an empty answer: otherwise a wrong
+    format would silently turn every field blank."""
+    if isinstance(out, list) and len(el.paths) == 1:
+        out = {el.paths[0]: out}                      # a bare list for a single list-valued field
+    if not isinstance(out, dict):
+        raise ValueError(f"{el.key}: expected a JSON object, got {type(out).__name__}")
+    if any(p in out for p in el.paths):
+        return out
+    flat = _flatten(out)
+    found = {p: flat[p] for p in el.paths if p in flat}
+    if not found:                                       # keys given without their section prefix
+        short = {p.split(".")[-1]: p for p in el.paths}
+        found = {short[k.split(".")[-1]]: v for k, v in flat.items() if k.split(".")[-1] in short}
+    if not found:
+        raise ValueError(f"{el.key}: the reply held none of the expected fields {el.paths} (keys: {list(out)[:6]})")
+    if "_evidence" in out:
+        found["_evidence"] = out["_evidence"]
+    return found
+
+
 def run_element(el: Element, retriever: Retriever) -> tuple[dict, dict]:
     chunks = retriever.retrieve(el.queries, top_k=el.top_k)
     context = format_context(chunks)
     cite = SETTINGS.field_citations
     prompt = element_prompt(el, context, cite, SETTINGS.conditional_values)
-    out = complete_json("extractor", SYSTEM, prompt, max_tokens=16000)
-    if not isinstance(out, dict):
-        out = {}
+    out = _coerce(complete_json("extractor", SYSTEM, prompt, max_tokens=16000), el)
     values = {p: out.get(p, el.template()[p]) for p in el.paths}
     # where the answer came from: always the retrieved pages and sections,
     # and with field citations on, a page + quote per field (quote checked against the excerpts)
@@ -77,13 +111,23 @@ def run_element(el: Element, retriever: Retriever) -> tuple[dict, dict]:
 
 
 def extract_protocol(nct_id: str, workers: int = 6, include_soe: bool = True, log=print,
-                     system: str = "rag") -> dict:
+                     system: str = "rag", previous: dict | None = None) -> dict:
+    """Extract every data element. With ``previous`` (an earlier result that had errors), only the
+    elements that failed are run again and everything else is kept, so a resumed run costs little.
+
+    Raises ExtractionFailed when more than half the elements fail, so a setup problem stops the
+    run instead of being saved as a finished, empty extraction."""
     chunks = load_chunks(nct_id)
     retriever = Retriever(nct_id, chunks)
     retriever.rank(["warm up"])                            # embed once before threads start
-    doc = {cat: empty_category(cat) for cat in SCHEMAS if cat != "schedule_of_events"}
-    provenance: dict[str, dict] = {}
+    if previous:
+        doc, provenance = previous["extraction"], dict(previous.get("provenance", {}))
+        todo_keys = set(previous.get("errors", {}))
+    else:
+        doc = {cat: empty_category(cat) for cat in SCHEMAS if cat != "schedule_of_events"}
+        provenance, todo_keys = {}, None
     errors: dict[str, str] = {}
+    todo = [el for el in ELEMENTS if todo_keys is None or el.key in todo_keys]
 
     def work(el: Element):
         try:
@@ -92,7 +136,7 @@ def extract_protocol(nct_id: str, workers: int = 6, include_soe: bool = True, lo
             return el, {}, {}, str(exc)
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for el, values, prov, err in pool.map(work, ELEMENTS):
+        for el, values, prov, err in pool.map(work, todo):
             if err:
                 errors[el.key] = err
                 log(f"  {nct_id} {el.key}: ERROR {err}")
@@ -101,7 +145,7 @@ def extract_protocol(nct_id: str, workers: int = 6, include_soe: bool = True, lo
                 set_path(doc[el.category], path, v)
             provenance[el.key] = prov
 
-    if include_soe:
+    if include_soe and (todo_keys is None or "soe" in todo_keys):
         from .soe import extract_soe
         try:
             soe, prov = extract_soe(nct_id)
@@ -109,7 +153,11 @@ def extract_protocol(nct_id: str, workers: int = 6, include_soe: bool = True, lo
             provenance["soe"] = prov
         except (LLMError, ValueError) as exc:
             errors["soe"] = str(exc)
-            doc["schedule_of_events"] = {"schedule_of_events": []}
+            log(f"  {nct_id} soe: ERROR {exc}")
+            doc.setdefault("schedule_of_events", {"schedule_of_events": []})
+    if len(errors) > (len(todo) + 1) / 2:
+        first = next(iter(errors.values()))
+        raise ExtractionFailed(f"{len(errors)} of {len(todo) + 1} elements failed for {nct_id}. First error: {first}")
     return {"nct_id": nct_id, "system": system, "extraction": doc, "provenance": provenance, "errors": errors,
             "settings": {"retrieval": SETTINGS.retrieval, "rerank": SETTINGS.rerank, "conditional_values":
                          SETTINGS.conditional_values, "field_citations": SETTINGS.field_citations,
@@ -129,3 +177,13 @@ def save(result: dict) -> Path:
 
 def load(system: str, nct_id: str) -> dict:
     return json.loads(out_path(system, nct_id).read_text(encoding="utf-8"))
+
+
+def run_resumable(nct_id: str, system: str, log=print, force: bool = False, **kw) -> tuple[dict, str]:
+    """Build an extraction, skip it if it is complete, or re-run only the elements that failed last time."""
+    prev = load(system, nct_id) if out_path(system, nct_id).exists() and not force else None
+    if prev is not None and not prev.get("errors"):
+        return prev, "already built"
+    res = extract_protocol(nct_id, system=system, previous=prev, log=log, **kw)
+    save(res)
+    return res, ("resumed" if prev else "built")

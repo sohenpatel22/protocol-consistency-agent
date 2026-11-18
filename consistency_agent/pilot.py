@@ -68,8 +68,7 @@ def run_pilot(nct: str, max_usd: float, baseline: bool = True, bench_llm: bool =
         system = apply_variant(variant)
         if variant != "A":
             SETTINGS.effort = effort
-        if not out_path(system, nct).exists():
-            step(f"extract {variant}", lambda: save(extract.extract_protocol(nct, system=system, log=log)))
+        step(f"extract {variant}", lambda: extract.run_resumable(nct, system, log=log))
         if out_path(system, nct).exists() and not (JUDGEMENTS / system / f"{nct}.json").exists():
             step(f"judge {variant}", lambda: judge.judge_protocol(system, nct, log=log))
         return system

@@ -44,26 +44,48 @@ def _candidates(el: Element, retriever: Retriever, nct_id: str) -> tuple[list[di
 
 
 def annotate_protocol(nct_id: str, log=print) -> dict:
+    """Build the reference answers. If a file from an earlier run has failed items, only those are redone.
+    Raises RuntimeError when more than half fail (almost always a key, quota or model-name problem)."""
     retriever = Retriever(nct_id, load_chunks(nct_id))
-    items = {}
-    for el in all_elements():
+    try:
+        items = load_gt(nct_id)["items"]
+    except FileNotFoundError:
+        items = {}
+    failed_before = {k for k, v in items.items() if str(v.get("notes", "")).startswith("error:")}
+    todo = [el for el in all_elements() if el.key not in items or el.key in failed_before]
+    for el in todo:
         try:
             cands, ctx = _candidates(el, retriever, nct_id)
             user = (f"Data element: {el.label}\nCandidate A:\n{json.dumps(cands[0])}\n\n"
                     f"Candidate B:\n{json.dumps(cands[1])}\n\nProtocol excerpts:\n{ctx[:60000]}")
             adj = complete_json("adjudicator", ADJ_SYSTEM, user, max_tokens=12000)
+            if not isinstance(adj, dict) or "answer" not in adj:
+                raise ValueError("the adjudicator's reply had no 'answer'")
             items[el.key] = {"label": el.label, "category": el.category,
                              "answer": adj.get("answer", {}), "confidence": float(adj.get("confidence", 0)),
                              "notes": adj.get("notes", ""), "candidates": cands, "human_reviewed": False}
-        except (LLMError, ValueError, AttributeError) as exc:
+        except (LLMError, ValueError, AttributeError, TypeError, IndexError) as exc:
             log(f"  {nct_id} {el.key}: ERROR {exc}")
             items[el.key] = {"label": el.label, "category": el.category, "answer": {}, "confidence": 0.0,
                              "notes": f"error: {exc}", "candidates": [], "human_reviewed": False}
     out = {"nct_id": nct_id, "items": items}
+    errored = [k for k, v in items.items() if str(v.get("notes", "")).startswith("error:")]
+    if len(errored) > len(all_elements()) / 2:
+        first = items[errored[0]]["notes"]
+        raise RuntimeError(f"{len(errored)} of {len(items)} reference answers failed for {nct_id}. {first[:300]}")
     p = GROUND_TRUTH / f"{nct_id}.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(out, indent=1), encoding="utf-8")
     return out
+
+
+def gt_complete(nct_id: str) -> bool:
+    """True when every element has a reference answer that did not fail."""
+    try:
+        items = load_gt(nct_id)["items"]
+    except FileNotFoundError:
+        return False
+    return len(items) >= len(all_elements()) and not any(str(v.get("notes", "")).startswith("error:") for v in items.values())
 
 
 def load_gt(nct_id: str) -> dict:
