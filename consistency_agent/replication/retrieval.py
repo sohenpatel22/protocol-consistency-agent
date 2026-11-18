@@ -5,7 +5,9 @@ Uses Cohere embeddings like the paper when COHERE_API_KEY is set, BM25 otherwise
 from __future__ import annotations
 
 import math
+import os
 import re
+import time
 from collections import Counter
 
 import numpy as np
@@ -49,6 +51,7 @@ class Retriever:
         self.backend = backend or SETTINGS.embeddings
         self._bm25: BM25 | None = None
         self._emb: np.ndarray | None = None
+        self._qcache: dict[str, np.ndarray] = {}
 
     # --- scoring -----------------------------------------------------------------------
     def _scores(self, query: str) -> np.ndarray:
@@ -57,14 +60,16 @@ class Retriever:
                 self._bm25 = BM25([_chunk_text(c) for c in self.chunks])
             return self._bm25.scores(query)
         provider, _, model = self.backend.partition(":")
-        if provider != "cohere":
+        if provider not in ("cohere", "openrouter"):
             raise ValueError(f"Unknown embeddings backend {self.backend}")
         if self._emb is None:
-            self._emb = self._doc_embeddings(model)
-        q = np.array(_cohere_embed([query], model, "search_query")[0])
+            self._emb = self._doc_embeddings(provider, model)
+        if query not in self._qcache:                       # the same query is asked again in later rounds
+            self._qcache[query] = np.array(_embed(provider, [query], model, "search_query")[0])
+        q = self._qcache[query]
         return self._emb @ (q / (np.linalg.norm(q) + 1e-9))
 
-    def _doc_embeddings(self, model: str) -> np.ndarray:
+    def _doc_embeddings(self, provider: str, model: str) -> np.ndarray:
         cache = CACHE / self.nct_id / f"emb_{model.replace('/', '_')}.npy"
         if cache.exists():
             arr = np.load(cache)
@@ -72,8 +77,8 @@ class Retriever:
                 return arr
         texts = [_chunk_text(c)[:20000] for c in self.chunks]
         vecs = []
-        for i in range(0, len(texts), 64):
-            vecs.extend(_cohere_embed(texts[i:i + 64], model, "search_document"))
+        for i in range(0, len(texts), 32):
+            vecs.extend(_embed(provider, texts[i:i + 32], model, "search_document"))
         arr = np.array(vecs, dtype=np.float32)
         arr /= np.linalg.norm(arr, axis=1, keepdims=True) + 1e-9
         cache.parent.mkdir(parents=True, exist_ok=True)
@@ -135,10 +140,10 @@ class Retriever:
 
     def _rerank(self, queries: list[str], candidates: list[int]) -> list[int]:
         provider, _, model = SETTINGS.rerank.partition(":")
-        if provider != "cohere" or not candidates:
+        if provider not in ("cohere", "openrouter") or not candidates:
             return candidates
         docs = [_chunk_text(self.chunks[i])[:4000] for i in candidates]
-        order = _cohere_rerank(" | ".join(queries)[:2000], docs, model)
+        order = _rerank_call(provider, " | ".join(queries)[:2000], docs, model)
         return [candidates[i] for i in order]
 
     def pages(self, pages: list[int], neighbours: int = 1) -> list[Chunk]:
@@ -148,11 +153,47 @@ class Retriever:
         return sorted(hit, key=lambda c: c.order)
 
 
-def _cohere_rerank(query: str, docs: list[str], model: str) -> list[int]:
+def _openrouter_post(path: str, body: dict) -> dict:
+    """POST to OpenRouter (embeddings, rerank). Failures become LLMError so one bad call is handled per field."""
+    import requests
+
+    from ..llm import OPENROUTER_URL, LLMError
+    key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if not key:
+        raise LLMError("OPENROUTER_API_KEY is not set (add it to .env)")
+    last = ""
+    for attempt in range(4):
+        try:
+            r = requests.post(OPENROUTER_URL + path, json=body, timeout=120,
+                              headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+        except requests.RequestException as exc:
+            last = f"{type(exc).__name__}: {exc}"
+        else:
+            if r.status_code == 200:
+                return r.json()
+            last = f"HTTP {r.status_code}: {r.text[:200]}"
+            if r.status_code not in (408, 429, 500, 502, 503, 504):
+                break
+        time.sleep(2 ** attempt)
+    raise LLMError(f"OpenRouter {path} failed: {last}")
+
+
+def _rerank_call(provider: str, query: str, docs: list[str], model: str) -> list[int]:
+    """Document indices, most relevant first."""
+    if provider == "openrouter":
+        data = _openrouter_post("/rerank", {"model": model, "query": query, "documents": docs, "top_n": len(docs)})
+        return [r["index"] for r in data["results"]]
     import cohere  # optional dependency: pip install .[cohere]
 
     resp = cohere.ClientV2().rerank(model=model, query=query, documents=docs, top_n=len(docs))
     return [r.index for r in resp.results]
+
+
+def _embed(provider: str, texts: list[str], model: str, input_type: str) -> list[list[float]]:
+    if provider == "openrouter":
+        data = _openrouter_post("/embeddings", {"model": model, "input": texts, "input_type": input_type})
+        return [d["embedding"] for d in sorted(data["data"], key=lambda d: d["index"])]
+    return _cohere_embed(texts, model, input_type)
 
 
 def format_context(chunks: list[Chunk]) -> str:

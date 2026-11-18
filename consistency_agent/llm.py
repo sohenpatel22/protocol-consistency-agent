@@ -104,6 +104,8 @@ def _dispatch(provider: str, model: str, call: Call) -> str:
         text, usage = _anthropic(model, call, provider)
     elif provider == "openai":
         text, usage = _openai(model, call)
+    elif provider == "openrouter":
+        text, usage = _openrouter(model, call)
     else:
         raise LLMError(f"Unknown provider '{provider}'")
     _log(call.role, f"{provider}:{model}", usage, time.time() - t0)
@@ -119,6 +121,13 @@ def _client(provider: str):
             elif provider == "bedrock":            # Claude on AWS Bedrock; uses the normal AWS credentials
                 import anthropic
                 _clients[provider] = anthropic.AnthropicBedrock(max_retries=4)
+            elif provider == "openrouter":         # one key for Claude, GPT and Cohere (OpenAI-compatible API)
+                import openai
+                key = os.getenv("OPENROUTER_API_KEY", "").strip()
+                if not key:
+                    raise LLMError("OPENROUTER_API_KEY is not set (add it to .env)")
+                _clients[provider] = openai.OpenAI(base_url=OPENROUTER_URL, api_key=key, max_retries=4,
+                                                   timeout=600)
             else:
                 import openai
                 _clients[provider] = openai.OpenAI(max_retries=4)
@@ -156,6 +165,7 @@ def _anthropic(model: str, call: Call, provider: str = "anthropic") -> tuple[str
 
 def _supports_effort(model: str) -> bool:
     """The effort setting exists on the newer Claude models (Opus 4.5+, the 5.x family)."""
+    model = model.replace(".", "-")
     return any(t in model for t in ("opus-4-5", "opus-4-6", "opus-4-7", "opus-4-8", "opus-5", "sonnet-5",
                                     "sonnet-4-6", "haiku-5", "fable"))
 
@@ -179,6 +189,45 @@ def _openai(model: str, call: Call) -> tuple[str, dict]:
     return text, usage
 
 
+OPENROUTER_URL = "https://openrouter.ai/api/v1"
+
+
+def _openrouter(model: str, call: Call) -> tuple[str, dict]:
+    """Any model on OpenRouter ("anthropic/claude-opus-5.5", "openai/gpt-4o", ...) through the OpenAI SDK."""
+    client = _client("openrouter")
+    content: Any = call.user
+    if call.images:
+        content = [{"type": "image_url", "image_url": {
+            "url": "data:image/png;base64," + base64.standard_b64encode(Path(img).read_bytes()).decode("utf-8")}}
+            for img in call.images] + [{"type": "text", "text": call.user}]
+    kwargs: dict[str, Any] = dict(
+        model=model, max_tokens=call.max_tokens,
+        messages=[{"role": "system", "content": call.system + "\nReply with a single JSON value and nothing else."},
+                  {"role": "user", "content": content}],
+    )
+    extra: dict[str, Any] = {"usage": {"include": True}}          # ask OpenRouter for the real cost
+    if model.startswith("openai/gpt-4"):
+        kwargs["temperature"] = 0
+    if SETTINGS.effort and _supports_effort(model):
+        extra["reasoning"] = {"effort": SETTINGS.effort}
+    kwargs["extra_body"] = extra
+    try:
+        resp = client.chat.completions.create(**kwargs)
+    except Exception as exc:                                       # auth, quota, unknown model, bad request
+        raise LLMError(f"OpenRouter call failed ({model}): {type(exc).__name__}: {str(exc)[:300]}") from exc
+    choice = resp.choices[0]
+    text = choice.message.content or ""
+    if not text.strip():
+        raise LLMError(f"{model} returned no text (finish_reason={choice.finish_reason}); "
+                       "the answer may have been cut off by max_tokens or filtered")
+    u = resp.usage
+    usage = {"input_tokens": getattr(u, "prompt_tokens", 0), "output_tokens": getattr(u, "completion_tokens", 0)}
+    cost = (getattr(u, "model_extra", None) or {}).get("cost")
+    if isinstance(cost, (int, float)):
+        usage["usd_actual"] = float(cost)
+    return text, usage
+
+
 # Rough list prices, US$ per million tokens (input, output). Check current pricing before a big run;
 # these are only used to estimate cost in `consistency-agent cost`.
 PRICES = {
@@ -189,7 +238,7 @@ PRICES = {
 
 
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
-    name = model.split(":", 1)[-1]
+    name = model.split(":", 1)[-1].replace(".", "-")
     price = next((v for k, v in PRICES.items() if k in name), None)
     if price is None:
         return None
@@ -199,10 +248,12 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | 
 def _log(role: str, model: str, usage: dict, seconds: float) -> None:
     global _spent
     RUNS.mkdir(parents=True, exist_ok=True)
-    cost = estimate_cost(model, usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+    cost = usage.get("usd_actual")
+    if cost is None:
+        cost = estimate_cost(model, usage.get("input_tokens", 0), usage.get("output_tokens", 0))
     with _lock:
         _spent += cost or 0.0
     rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "role": role, "model": model,
-           "seconds": round(seconds, 2), "usd_est": None if cost is None else round(cost, 5), **usage}
+           "seconds": round(seconds, 2), "usd_est": None if cost is None else round(cost, 5), "usd_is_actual": "usd_actual" in usage, **usage}
     with _lock, open(RUNS / "usage.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
