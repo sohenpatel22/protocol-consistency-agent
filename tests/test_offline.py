@@ -267,7 +267,9 @@ def restore_settings():
 def test_variants_switch_models_and_upgrades(restore_settings, monkeypatch):
     from consistency_agent.config import apply_variant
     monkeypatch.delenv("COHERE_API_KEY", raising=False)
+    monkeypatch.setenv("AGENT_VIA", "direct")      # don't depend on which keys are in .env
     s = restore_settings
+    s.via = "direct"
     assert apply_variant("A") == "rag" and s.model("extractor") == "anthropic:claude-sonnet-4-5"
     assert apply_variant("B1") == "rag_b1" and s.model("extractor") == "anthropic:claude-opus-5-5"
     assert s.retrieval == "dense" and not s.conditional_values
@@ -344,3 +346,10 @@ def test_spending_cap_stops_calls(monkeypatch):
         llm._check_budget()
     monkeypatch.setattr(llm, "_spent", 0.5)
     llm._check_budget()                          # under the cap: no error
+
+
+def test_openrouter_model_names():
+    from consistency_agent.config import to_openrouter
+    assert to_openrouter("anthropic:claude-sonnet-4-5") == "openrouter:anthropic/claude-sonnet-4.5"
+    assert to_openrouter("openai:gpt-4o") == "openrouter:openai/gpt-4o"
+    assert to_openrouter("cohere:rerank-v3.5") == "cohere:rerank-v3.5"

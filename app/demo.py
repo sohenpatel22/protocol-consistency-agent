@@ -20,7 +20,6 @@ sys.path.insert(0, str(ROOT))
 from consistency_agent.agent import audit  # noqa: E402
 from consistency_agent.agent.pipeline import check  # noqa: E402
 from consistency_agent.agent.resolve import recheck  # noqa: E402
-from consistency_agent.agent.rules import run_rules  # noqa: E402
 from consistency_agent.bench import metrics  # noqa: E402
 from consistency_agent.bench.inject import OPERATORS, generate  # noqa: E402
 from consistency_agent.bench.run import evaluate_case  # noqa: E402
@@ -54,7 +53,7 @@ OP_NAMES = {
     "hn_drug_case": "Look-alike: drug name in capitals with ®",
 }
 
-st.set_page_config(page_title="Study Data Consistency Agent", page_icon="✅", layout="wide")
+st.set_page_config(page_title="Study Data Consistency Agent", layout="wide")
 
 
 # ---------- data ----------
