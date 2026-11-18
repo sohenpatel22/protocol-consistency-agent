@@ -9,6 +9,12 @@ The work is done in two steps:
 1. **Replicate the extraction pipeline** from Babaeipour, Charest & Wright, *AI-assisted protocol information extraction for improved accuracy and efficiency in clinical trial workflows*, J. Biomedical Informatics 2026 ([arXiv:2602.00052](https://arxiv.org/abs/2602.00052)). We rerun it and check how close we get to their numbers: 89.0% for RAG and 62.6% for a single LLM call.
 2. **Add a consistency agent on top.** It is a checker that runs on the extracted JSON. It flags conflicts between sections, proposes a fix, and waits for a person to approve it.
 
+## Status (November 2026)
+
+- **Built and tested offline:** the replication pipeline, the consistency checker, the fix-up loop, the benchmark and the demo app. 25 tests pass without any API key.
+- **Not run yet on real models.** There are no accuracy numbers in this repo, for the replication or for the checker. The benchmark numbers in the demo come from a small synthetic protocol and only show that the code works.
+- **Not built yet:** a check of the protocol itself at upload, a check of the generated documents (consent form, budget, forms) against the extracted data, re-checking only what a reviewer's edit touches, and grouping related alerts by root cause.
+
 ## Step 1: replication
 
 | | Paper | Here |
@@ -74,9 +80,10 @@ python -m venv .venv
 pip install -e ".[dev]"            # add ,cohere for the paper's embeddings, ,tables for Table Transformer
 copy .env.example .env             # then add ANTHROPIC_API_KEY and OPENAI_API_KEY
 pytest -q                          # offline tests, no keys needed
+consistency-agent preflight        # checks keys, model names and the PDFs before you spend anything
 ```
 
-To use Claude on AWS Bedrock instead, set roles to `bedrock:<model id>` in `.env`. See `.env.example`.
+If you only have an OpenRouter key, put `OPENROUTER_API_KEY` in `.env` and leave the others empty; every call (Claude, GPT and Cohere) then goes through OpenRouter. `AGENT_VIA=direct` or `AGENT_VIA=openrouter` forces one or the other. To use Claude on Bedrock, set roles to `bedrock:<model id>` (see `.env.example`).
 
 ## Running
 
@@ -130,7 +137,7 @@ consistency-agent pilot --max-usd 15
 
 It builds the reference answers, runs the paper's pipeline (Run A) and ours (B2, Claude Opus 5.5 at low effort), checks B2 for conflicts, runs the fix-up agent (B3), scores all three with the judge, and runs the planted-contradiction benchmark. It writes `results/pilot_<NCT>.md`, which the demo app shows in its last tab.
 
-- **Spending cap:** it stops calling models once `--max-usd` is reached (estimated from list prices). A stopped run resumes where it left off.
+- **Spending cap:** it stops calling models once `--max-usd` is reached. A stopped run resumes where it left off, and only elements that failed are redone.
 - **Options:** `--no-baseline` skips Run A to save about $2; `--bench-llm` adds the LLM to the benchmark (about $5 more).
 - **Rough cost:** about $10–15 per protocol.
 
